@@ -23,6 +23,18 @@ All events produced during a tick are delivered together at end-of-tick — neve
 
 End-of-tick batching forecloses a class of determinism bugs (subscribers mutating state mid-tick via Actions) and makes "everything that happened this tick" a single logical step for renderers, UI, and test harnesses.
 
+## Action-produced events: synchronous, between ticks
+
+Events produced by a **PlayerActionHandler** (ADR-0014) fire **synchronously inside `engine.dispatch`**, before the call returns — never queued, never batched into a later tick.
+
+The "end-of-tick batch" rule above is scoped to events produced *during a tick*. PlayerActions run *between* ticks (ADR-0014), so the rule does not apply: there is no enclosing tick to batch into, and the determinism concern the batch rule guards against ("subscribers mutating state mid-tick via Actions") is structurally absent between ticks.
+
+Concretely, when `engine.placeTower(...)` returns `{ ok: true, effect: { ... } }`, every subscriber to `towerPlaced` has already fired. World state, ActionResult, and event delivery are all coherent at the moment `dispatch` returns. A subscriber MAY submit further actions in response — they queue as subsequent between-tick actions and are processed in submission order (ADR-0014).
+
+Ordering within a single action dispatch: events emitted by one handler fire in the order the handler emitted them. Across multiple actions submitted between two ticks: each action's events fire fully before the next action's handler runs.
+
+Determinism: action submission order is part of the engine's deterministic input (the transcript records `(tick, action)` per ADR-0014). Same actions in same order → same events in same order → same world state.
+
 ## State access for renderers
 
 The primary read surface is a query API over the ECS world:

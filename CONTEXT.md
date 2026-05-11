@@ -39,7 +39,7 @@ A unit of extension. Registers entries into one or more registries. Built-in plu
 _Avoid_: module, extension, mod
 
 **Registry**:
-A named, kernel-owned collection that plugins register entries into. The fixed catalogue of registries is the engine's only public extension surface. The catalogue: **Component**, **EntityKind**, **System**, **AttackEffect**, **TargetingStrategy**, **UpgradeOp**, **PlacementMode**, **MapFeature**, **WaveTrigger**, **RewardKind**, **GameRule**. Plugin-extensible event kinds are *not* a registry — they extend the GameEvent type via TS declaration merging.
+A named, kernel-owned collection that plugins register entries into. The fixed catalogue of registries is the engine's only public extension surface. The catalogue: **Component**, **EntityKind**, **System**, **AttackEffect**, **TargetingStrategy**, **UpgradeOp**, **PlacementMode**, **MapFeature**, **WaveTrigger**, **RewardKind**, **GameRule**, **PlayerActionHandler**. Plugin-extensible event kinds are *not* a registry — they extend the GameEvent type via TS declaration merging.
 _Avoid_: registrar, factory, container
 
 ### State
@@ -153,7 +153,7 @@ A pre-declared `{x, y}` tile on a Map designated for Tower placement, used when 
 _Avoid_: build spot, placement marker
 
 **PlacementMode**:
-A plugin-registered rule set governing where Towers may be placed. Built-in: `{ "kind": "fixed" }` and `{ "kind": "free" }`. Plugin-registered modes carry their own configuration fields alongside `kind`.
+A plugin-registered rule set governing where Towers may be placed. Built-in: `{ "kind": "fixed" }` and `{ "kind": "free" }`. Plugin-registered modes carry their own configuration fields alongside `kind`. The registry entry carries the placement-validation function the `placeTower` PlayerActionHandler delegates to — JSON data references the mode by `kind`, the function lives in the registering Plugin.
 _Avoid_: build mode, placement type
 
 ### Sessions
@@ -185,6 +185,20 @@ _Avoid_: setting, parameter, config
 **RewardKind**:
 A registered way the player earns or loses resources. Built-in: `gold-on-kill` (awards `killReward` when an Enemy dies), `sell-value` (returns `(towerCost + purchasedUpgradeCosts) × refundPercent` when a Tower is sold), `wave-clear` (awards a Wave's clear bonus when finished before duration expires). Plugins register additional kinds (xp, custom drops, mana regen).
 _Avoid_: drop, loot, reward type
+
+### Actions
+
+**PlayerAction**:
+A `kind`-discriminated request submitted between Ticks. Built-in: `placeTower`, `sellTower`, `purchaseUpgrade`, `moveRallyPoint`, `overrideTargeting`, `sendNextWave`. Plugins register additional kinds through the **PlayerActionHandler** registry. See ADR-0014.
+_Avoid_: command, intent, input
+
+**PlayerActionHandler**:
+A registered piece of between-Tick logic that validates and applies a PlayerAction of a given `kind`. Dispatched by `kind`; one handler per kind. Returns an **ActionResult** — never throws for normal failure outcomes (insufficient gold, invalid position, …).
+_Avoid_: action processor, action service, command handler
+
+**ActionResult**:
+The structured return of a PlayerAction. `{ ok: true, effect }` on success; `{ ok: false, code, message, hint? }` on failure. Failure `code` values are part of the engine's public API.
+_Avoid_: action response, action outcome
 
 ### Data
 
