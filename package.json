@@ -7,7 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "sandcastle": "npx tsx .sandcastle/main.mts"
+    "sandcastle": "npx tsx .sandcastle/main.mts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -22,6 +25,10 @@
   },
   "homepage": "https://github.com/Jamerrone/ai-workflow-playground#readme",
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.10"
+    "@ai-hero/sandcastle": "^0.5.10",
+    "@types/node": "^25.7.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.4"
   }
 }
