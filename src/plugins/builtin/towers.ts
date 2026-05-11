@@ -1,8 +1,8 @@
+import { actionFailure } from "../../kernel/action-result.js";
 import {
   PHASE_ORDER,
   Phase,
   type ActionContext,
-  type ActionResult,
   type PlaceTowerAction,
   type PlacementValidationResult,
   type Plugin,
@@ -21,12 +21,6 @@ interface TowerArchetype {
 interface MapData {
   readonly placementMode: { readonly kind: string };
   readonly towerSlots?: ReadonlyArray<Position>;
-}
-
-function fail(code: string, message: string, hint?: string): ActionResult {
-  return hint === undefined
-    ? { ok: false, code, message }
-    : { ok: false, code, message, hint };
 }
 
 export const towersPlugin: Plugin = {
@@ -63,32 +57,32 @@ export const towersPlugin: Plugin = {
       handle(ctx, action) {
         const a = action as PlaceTowerAction;
         const scenario = (ctx.registry.scenarios as Record<string, { map: string }>)[ctx.scenarioId];
-        if (!scenario) return fail("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
+        if (!scenario) return actionFailure("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
         const towerDef = (ctx.registry.towers as Record<string, TowerArchetype>)[a.tower];
         if (!towerDef) {
-          return fail("NO_SUCH_TOWER", `Tower archetype '${a.tower}' is not registered.`);
+          return actionFailure("NO_SUCH_TOWER", `Tower archetype '${a.tower}' is not registered.`);
         }
         const map = (ctx.registry.maps as Record<string, MapData>)[scenario.map];
         if (!map) {
-          return fail("NO_SUCH_MAP", `Map '${scenario.map}' is not registered.`);
+          return actionFailure("NO_SUCH_MAP", `Map '${scenario.map}' is not registered.`);
         }
         const modeKind = map.placementMode.kind;
         const modeEntry = ctx.placementModes.get(modeKind);
         if (!modeEntry) {
-          return fail(
+          return actionFailure(
             "UNKNOWN_PLACEMENT_MODE",
             `No PlacementMode registered for kind '${modeKind}'.`,
           );
         }
         const valid = modeEntry.validate(a.position, map, ctx.world);
         if (!valid.ok) {
-          return fail("INVALID_POSITION", valid.reason ?? "Invalid placement position.");
+          return actionFailure("INVALID_POSITION", valid.reason ?? "Invalid placement position.");
         }
 
         const goldEntity = ctx.world.get("towers/state");
         const goldComp = goldEntity?.components.get("gold") as { amount: number } | undefined;
         if (!goldComp || goldComp.amount < towerDef.cost) {
-          return fail("INSUFFICIENT_GOLD", "Not enough gold to place tower.");
+          return actionFailure("INSUFFICIENT_GOLD", "Not enough gold to place tower.");
         }
 
         // Validation complete — apply.

@@ -1,3 +1,4 @@
+import { actionFailure } from "./action-result.js";
 import { EngineDisposedError } from "./errors.js";
 import { resolveSystemOrder } from "./ordering.js";
 import { serializeWorld } from "./snapshot.js";
@@ -16,6 +17,7 @@ import {
   type Phase,
   type PlacementModeDef,
   type PlayerAction,
+  type Plugin,
   type Position,
   type RegistrationApi,
   type ScenarioLoadHook,
@@ -30,7 +32,7 @@ interface Registries {
   scenarioLoadHooks: ScenarioLoadHook[];
 }
 
-function loadPlugins(plugins: readonly { register(api: RegistrationApi): void }[]): Registries {
+function loadPlugins(plugins: readonly Plugin[]): Registries {
   const components = new Map<string, ComponentDef>();
   const systemsByPhase = new Map<Phase, SystemDef[]>(
     PHASE_ORDER.map((p) => [p, []]),
@@ -104,12 +106,6 @@ export function createEngine(
     if (disposed) throw new EngineDisposedError();
   };
 
-  const fail = (code: string, message: string, hint?: string): ActionResult => {
-    return hint === undefined
-      ? { ok: false, code, message }
-      : { ok: false, code, message, hint };
-  };
-
   const buildActionContext = (): ActionContext => ({
     world,
     registry,
@@ -125,11 +121,11 @@ export function createEngine(
   const dispatch = (action: PlayerAction): ActionResult => {
     assertAlive();
     if (activeScenarioId === null) {
-      return fail("NO_SCENARIO_LOADED", "No scenario is currently active.");
+      return actionFailure("NO_SCENARIO_LOADED", "No scenario is currently active.");
     }
     const handler = actionHandlers.get(action.kind);
     if (!handler) {
-      return fail(
+      return actionFailure(
         "UNKNOWN_ACTION_KIND",
         `No PlayerActionHandler is registered for kind '${action.kind}'.`,
       );

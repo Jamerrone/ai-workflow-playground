@@ -1,10 +1,5 @@
-import type { Plugin } from "../../types.js";
-import { Phase } from "../../types.js";
+import { Phase, type Plugin, type Position } from "../../types.js";
 
-interface Position {
-  x: number;
-  y: number;
-}
 interface PathProgress {
   pathId: string;
   wpIndex: number;

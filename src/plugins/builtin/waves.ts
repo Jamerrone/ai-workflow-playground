@@ -1,8 +1,8 @@
+import { actionFailure } from "../../kernel/action-result.js";
 import {
   PHASE_ORDER,
   Phase,
   type ActionContext,
-  type ActionResult,
   type Plugin,
 } from "../../types.js";
 
@@ -14,12 +14,6 @@ interface WaveState {
 }
 
 const STATE_ENTITY = "waves/state";
-
-function fail(code: string, message: string, hint?: string): ActionResult {
-  return hint === undefined
-    ? { ok: false, code, message }
-    : { ok: false, code, message, hint };
-}
 
 export const wavesPlugin: Plugin = {
   id: "waves",
@@ -46,13 +40,13 @@ export const wavesPlugin: Plugin = {
       kind: "sendNextWave",
       handle(ctx) {
         const scenario = (ctx.registry.scenarios as Record<string, { waves: Array<unknown> }>)[ctx.scenarioId];
-        if (!scenario) return fail("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
+        if (!scenario) return actionFailure("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
         const wsEntity = ctx.world.get(STATE_ENTITY);
         const ws = wsEntity?.components.get("waveState") as WaveState | undefined;
-        if (!ws) return fail("NO_SCENARIO_LOADED", "Wave state missing.");
-        if (ws.active) return fail("WAVE_ALREADY_ACTIVE", "Current wave still spawning.");
+        if (!ws) return actionFailure("NO_SCENARIO_LOADED", "Wave state missing.");
+        if (ws.active) return actionFailure("WAVE_ALREADY_ACTIVE", "Current wave still spawning.");
         if (ws.nextIndex >= scenario.waves.length) {
-          return fail("NO_WAVES", "No more waves to send.");
+          return actionFailure("NO_WAVES", "No more waves to send.");
         }
         ctx.world.mutate(STATE_ENTITY, "waveState", () => ({
           ...ws,

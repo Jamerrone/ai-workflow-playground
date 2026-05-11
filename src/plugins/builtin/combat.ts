@@ -1,12 +1,6 @@
-import type { Plugin } from "../../types.js";
-import { Phase } from "../../types.js";
+import { Phase, type Plugin, type Position } from "../../types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
-
-interface Position {
-  x: number;
-  y: number;
-}
 
 interface PendingDamageEntry {
   source: string;
