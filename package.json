@@ -1,0 +1,27 @@
+{
+  "name": "ai-workflow-playground",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "sandcastle": "npx tsx .sandcastle/main.mts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jamerrone/ai-workflow-playground.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Jamerrone/ai-workflow-playground/issues"
+  },
+  "homepage": "https://github.com/Jamerrone/ai-workflow-playground#readme",
+  "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.10"
+  }
+}
