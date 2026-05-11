@@ -3,6 +3,7 @@ import {
   Phase,
   type ActionContext,
   type Plugin,
+  type Position,
 } from "../../types.js";
 
 interface WaveState {
@@ -17,7 +18,7 @@ const WAVES_STATE_ENTITY = "waves/state";
 
 interface BaseEntry {
   id: string;
-  position: { x: number; y: number };
+  position: Position;
   hp: number;
 }
 
