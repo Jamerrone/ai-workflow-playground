@@ -78,7 +78,7 @@ function isStatsObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function validateNumberStats(
+export function validateNumberStats(
   effect: unknown,
   fields: readonly string[],
 ): AttackEffectValidationResult {

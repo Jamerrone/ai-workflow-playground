@@ -3,10 +3,11 @@ import {
   Phase,
   type AttackEffectConfig,
   type AttackEffectContext,
-  type AttackEffectValidationResult,
+  type AttackEffectFire,
   type Plugin,
   type Position,
 } from "../../types.js";
+import { validateNumberStats } from "./attack-effects.js";
 
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
 const FIRES_COMPONENT = "pendingFires";
@@ -28,25 +29,6 @@ interface ProjectileData {
     };
   };
   readonly effects: ReadonlyArray<AttackEffectConfig>;
-}
-
-function isStatsObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function validateNumberStats(
-  effect: unknown,
-  fields: readonly string[],
-): AttackEffectValidationResult {
-  if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-  const stats = (effect as { stats?: unknown }).stats;
-  if (!isStatsObject(stats)) return { ok: false, reason: "missing 'stats' object" };
-  for (const f of fields) {
-    if (typeof stats[f] !== "number") {
-      return { ok: false, reason: `stats.${f} must be a number` };
-    }
-  }
-  return { ok: true };
 }
 
 export const projectilesPlugin: Plugin = {
@@ -110,19 +92,7 @@ export const projectilesPlugin: Plugin = {
           all: [PROJECTILE_COMPONENT, "position"],
         });
 
-        const hitFires: Array<{
-          source: { id: string; position: Position };
-          primaryTarget: { id: string; position: Position };
-          attack: {
-            id: string;
-            stats: Record<string, unknown>;
-            targetFilter?: {
-              require?: string[];
-              exclude?: string[];
-            };
-          };
-          effects: ReadonlyArray<AttackEffectConfig>;
-        }> = [];
+        const hitFires: AttackEffectFire[] = [];
         const toDestroy: string[] = [];
 
         for (const proj of projectiles) {
@@ -160,7 +130,7 @@ export const projectilesPlugin: Plugin = {
                 id: data.targetId,
                 position: { ...targetPos },
               },
-              attack: data.attack as (typeof hitFires)[number]["attack"],
+              attack: data.attack,
               effects: data.effects,
             });
 

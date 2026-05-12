@@ -234,21 +234,9 @@ describe("projectiles: expiry", () => {
 
   it("emits projectileExpired with reason target-lost when target is destroyed mid-flight", () => {
     const reg = buildEffectsRegistry();
-    // Two attacks: first is hitscan damage that kills the enemy, second is projectile-count
-    // Actually, let's have the enemy die from low HP and a direct damage effect on a different tower
-    // Simpler: just use a 1 HP enemy that gets killed by hitscan damage from the first fire,
-    // then a second tower fires a projectile — but the effects registry only has one tower slot.
-
-    // Alternative: enemy with 1 HP. Tower fires projectile-count + damage. projectile-count
-    // aborts damage (so damage doesn't apply immediately). On the next tick the tower fires
-    // AGAIN (if cooldown allows). But cooldown is 0.5 and we tick at 0.1...
-    // Actually, let me think differently. We can manually destroy the target by having it walk
-    // off the map. Or we can have two enemy groups where the first gets killed differently.
-
-    // Simplest approach: use a very slow projectile so it takes many ticks.
-    // Have the enemy walk into the base and get destroyed.
-    (reg.enemies as any).grunt.stats.speed = 10; // walks fast to base
-    (reg.enemies as any).grunt.stats.hp = 10000; // doesn't die from damage
+    // Fast enemy reaches the base before the slow projectile catches it.
+    (reg.enemies as any).grunt.stats.speed = 10;
+    (reg.enemies as any).grunt.stats.hp = 10000;
     setEffects(reg, [
       { kind: "projectile-count", id: "pc", stats: { count: 1, speed: 0.5, maxRange: 20 } },
     ]);
