@@ -42,9 +42,8 @@ function multiEnemyRegistry(): ConfigRegistry {
 }
 
 function spawnTrio(reg: ConfigRegistry, tags: Record<string, readonly string[]> = {}): void {
-  // We avoid running the wave system: instead place the enemies directly via three
-  // archetypes the wave plugin then spawns through a single wave with three groups.
-  // Easier: define three enemy archetypes (a, b, c) and a wave that spawns one of each.
+  // Three enemy archetypes (a, b, c) with distinct hp/tags, spawned together by a
+  // single wave of three groups — gives each strategy a meaningful choice.
   (reg.enemies as any).a = {
     tags: ["ground", ...(tags.a ?? [])],
     stats: { hp: 30, speed: 0, baseDamage: 0 },
@@ -96,16 +95,10 @@ function firstTargetForStrategy(
 describe("targeting strategies — full set", () => {
   describe("closest-to-base", () => {
     it("picks the enemy nearest the base when multiple are in range", () => {
-      // Move enemy 'a' closer to the base by giving it more progress.
-      // All three spawn at (0,0) on a flat path, so closest = the one that walked furthest.
-      // With speed 0, all are at (0,0) — closest is determined by insertion order tie-break.
-      // Make it concrete by manually placing distinct positions via the wave plugin: keep
-      // the first wave's spawn distinct via interval so each spawns at a different tick.
-      // Simpler: assert the strategy picks SOMEONE (the test below covers ordering).
       const reg = multiEnemyRegistry();
       spawnTrio(reg);
       (reg.towers as any).archer.targeting = { kind: "closest-to-base" };
-      // Make 'a' faster so it gets closer to the base.
+      // Give 'a' speed so it walks ahead of the others toward the base.
       (reg.enemies as any).a.stats.speed = 1;
       const engine = createEngine(reg, { plugins: builtInBundle, seed: 1 });
       const fires: GameEvent[] = [];

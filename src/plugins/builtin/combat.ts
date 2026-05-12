@@ -1,4 +1,10 @@
-import { Phase, type Plugin, type Position, type TargetingStrategyConfig } from "../../types.js";
+import {
+  Phase,
+  type Plugin,
+  type Position,
+  type TargetingCandidate,
+  type TargetingStrategyConfig,
+} from "../../types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
@@ -83,9 +89,7 @@ export const combatPlugin: Plugin = {
             (a, b) => (b.stats.damage ?? 0) - (a.stats.damage ?? 0),
           );
           let firedAttack: any = null;
-          let firedTarget:
-            | { id: string; components: ReadonlyMap<string, unknown> }
-            | undefined;
+          let firedTarget: TargetingCandidate | undefined;
           for (const attack of sortedAttacks) {
             const eligible = enemies.filter((e) => {
               const ep = e.components.get("position") as Position;
