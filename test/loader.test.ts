@@ -366,7 +366,7 @@ describe("Loader: template inheritance", () => {
           abstract: true,
           cost: 50,
           attacks: [
-            { id: "shot", stats: { damage: 5, range: 3, cooldown: 1 }, effects: [{ kind: "damage" }] },
+            { id: "shot", stats: { damage: 5, range: 3, cooldown: 1 }, effects: [{ kind: "damage", stats: { amount: 5 } }] },
           ],
         },
         archer: {

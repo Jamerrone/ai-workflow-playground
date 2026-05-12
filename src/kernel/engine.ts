@@ -8,6 +8,7 @@ import {
   type ActionContext,
   type ActionHandlerDef,
   type ActionResult,
+  type AttackEffectDef,
   type ComponentDef,
   type ConfigRegistry,
   type Engine,
@@ -29,6 +30,7 @@ interface Registries {
   systemsByPhase: Map<Phase, SystemDef[]>;
   actionHandlers: Map<string, ActionHandlerDef>;
   placementModes: Map<string, PlacementModeDef>;
+  attackEffects: Map<string, AttackEffectDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
 }
 
@@ -39,6 +41,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   );
   const actionHandlers = new Map<string, ActionHandlerDef>();
   const placementModes = new Map<string, PlacementModeDef>();
+  const attackEffects = new Map<string, AttackEffectDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
 
   const api: RegistrationApi = {
@@ -54,6 +57,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerPlacementMode(def) {
       placementModes.set(def.kind, def);
     },
+    registerAttackEffect(def) {
+      attackEffects.set(def.kind, def);
+    },
     onScenarioLoad(hook) {
       scenarioLoadHooks.push(hook);
     },
@@ -64,6 +70,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     systemsByPhase,
     actionHandlers,
     placementModes,
+    attackEffects,
     scenarioLoadHooks,
   };
 }
@@ -72,8 +79,14 @@ export function createEngine(
   registry: ConfigRegistry,
   options: EngineOptions,
 ): Engine {
-  const { systemsByPhase, components, actionHandlers, placementModes, scenarioLoadHooks } =
-    loadPlugins(options.plugins);
+  const {
+    systemsByPhase,
+    components,
+    actionHandlers,
+    placementModes,
+    attackEffects,
+    scenarioLoadHooks,
+  } = loadPlugins(options.plugins);
   for (const phase of PHASE_ORDER) {
     systemsByPhase.set(phase, resolveSystemOrder(systemsByPhase.get(phase)!));
   }
@@ -112,6 +125,7 @@ export function createEngine(
     scenarioId: activeScenarioId!,
     tickIndex,
     placementModes,
+    attackEffects,
     emit(event: GameEvent) {
       // Action-produced events fire synchronously, before dispatch returns (ADR-0016).
       deliver(event);
@@ -143,6 +157,7 @@ export function createEngine(
         registry,
         scenarioId: activeScenarioId,
         placementModes,
+        attackEffects,
         emit(event: GameEvent) {
           pending.push(event);
         },

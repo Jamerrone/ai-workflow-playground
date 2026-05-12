@@ -200,7 +200,9 @@ function validateTower(ctx: ValidationContext, id: string, raw: Record<string, u
       if (Array.isArray(atk.effects)) {
         atk.effects.forEach((eff, j) => {
           if (!isObject(eff)) return;
-          checkKind(ctx, "attackEffect", eff, `${atkPath}.effects[${j}]`);
+          const effPath = `${atkPath}.effects[${j}]`;
+          checkKind(ctx, "attackEffect", eff, effPath);
+          validateAttackEffectFields(ctx, eff, effPath);
         });
       }
     });
@@ -295,6 +297,70 @@ function validateUpgrade(ctx: ValidationContext, id: string, raw: Record<string,
       if (!isObject(op)) return;
       checkKind(ctx, "upgradeOp", op, `${path}.ops[${i}]`);
     });
+  }
+}
+
+// Per-kind required numeric stat fields for the built-in attack-effects plugin.
+// Plugins that register their own AttackEffect kinds carry validation in the plugin
+// itself; the Loader's role here is to surface missing required stats on built-in kinds.
+const ATTACK_EFFECT_REQUIRED_STATS = new Map<string, readonly string[]>([
+  ["damage", ["amount"]],
+  ["splash", ["radius", "amount"]],
+  ["slow", ["factor", "duration"]],
+  ["dot", ["damagePerTick", "interval", "duration"]],
+  ["pierce", ["amount", "maxTargets"]],
+  ["bounce", ["amount", "hops"]],
+  ["line-pierce", ["amount", "maxTargets"]],
+  ["minimum-range", ["range"]],
+  ["target-count", ["count"]],
+  ["projectile-count", ["count"]],
+]);
+
+function validateAttackEffectFields(
+  ctx: ValidationContext,
+  effect: Record<string, unknown>,
+  path: string,
+): void {
+  const kind = effect.kind;
+  if (typeof kind !== "string") return;
+  const required = ATTACK_EFFECT_REQUIRED_STATS.get(kind);
+  if (!required) return;
+  const stats = effect.stats;
+  if (!isObject(stats)) {
+    ctx.errors.push({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.stats`,
+      message: `AttackEffect '${kind}' is missing 'stats'.`,
+      expected: `object with [${required.join(", ")}]`,
+      actual: String(stats),
+    });
+    return;
+  }
+  for (const f of required) {
+    if (typeof stats[f] !== "number") {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.stats.${f}`,
+        message: `AttackEffect '${kind}' is missing required stat '${f}'.`,
+        expected: "number",
+        actual: typeof stats[f],
+      });
+    }
+  }
+  // Slow factor must be in (0, 1].
+  if (kind === "slow" && typeof stats.factor === "number") {
+    if (stats.factor <= 0 || stats.factor > 1) {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.stats.factor`,
+        message: `slow factor must be in (0, 1].`,
+        expected: "number in (0, 1]",
+        actual: String(stats.factor),
+      });
+    }
   }
 }
 

@@ -7,13 +7,19 @@ interface PathProgress {
   baseDamage: number;
 }
 
+interface SlowEntry {
+  kind: "slow";
+  factor: number;
+  remaining: number;
+}
+
 export const movementPlugin: Plugin = {
   id: "movement",
   register(api) {
     api.registerSystem({
       id: "movement/enemyWalk",
       phase: Phase.Simulation,
-      reads: ["pathProgress"],
+      reads: ["pathProgress", "statusEffects"],
       writes: ["position", "pathProgress"],
       run(ctx) {
         if (!ctx.scenarioId) return;
@@ -25,7 +31,13 @@ export const movementPlugin: Plugin = {
           const pp = e.components.get("pathProgress") as PathProgress;
           const pos = e.components.get("position") as Position;
           const path = (map.paths as Array<any>).find((p) => p.id === pp.pathId);
-          let remaining = pp.speed * ctx.dt;
+          // statusEffects 'slow' entries multiply the effective speed.
+          const status =
+            (e.components.get("statusEffects") as ReadonlyArray<{ kind: string; factor?: number }> | undefined) ?? [];
+          const slowMul = status
+            .filter((s): s is SlowEntry => s.kind === "slow")
+            .reduce((acc, s) => acc * s.factor, 1);
+          let remaining = pp.speed * slowMul * ctx.dt;
           let { x, y } = pos;
           let wpIndex = pp.wpIndex;
           while (remaining > 0 && wpIndex + 1 < path.waypoints.length) {
