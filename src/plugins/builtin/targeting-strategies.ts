@@ -2,7 +2,6 @@ import type {
   Plugin,
   Position,
   TargetingCandidate,
-  TargetingContext,
   TargetingStrategyDef,
   TargetingStrategyValidationResult,
 } from "../../types.js";
@@ -89,7 +88,7 @@ const tagPriorityStrategy: TargetingStrategyDef = {
     }
     return { ok: true };
   },
-  select(ctx: TargetingContext) {
+  select(ctx) {
     const priority =
       (ctx.config as { priority?: readonly string[] }).priority ?? [];
     for (const tag of priority) {
