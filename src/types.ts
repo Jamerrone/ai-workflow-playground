@@ -112,6 +112,7 @@ export interface AttackEffectFire {
     readonly stats: Readonly<Record<string, unknown>>;
     readonly targetFilter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] };
   };
+  readonly effects: ReadonlyArray<AttackEffectConfig>;
 }
 
 export interface AttackEffectState {
