@@ -47,10 +47,6 @@ function dist(a: Position, b: Position): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-function entityPosition(world: AttackEffectContext["world"], id: string): Position | undefined {
-  return world.get(id)?.components.get("position") as Position | undefined;
-}
-
 function entityTags(world: AttackEffectContext["world"], id: string): readonly string[] {
   const enemy = world.get(id)?.components.get("enemy") as { tags?: readonly string[] } | undefined;
   return enemy?.tags ?? [];
@@ -82,11 +78,12 @@ function isStatsObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function requireNumber(
-  effect: AttackEffectConfig,
+function validateNumberStats(
+  effect: unknown,
   fields: readonly string[],
 ): AttackEffectValidationResult {
-  const stats = effect.stats;
+  if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
+  const stats = (effect as AttackEffectConfig).stats;
   if (!isStatsObject(stats)) return { ok: false, reason: "missing 'stats' object" };
   for (const f of fields) {
     if (typeof stats[f] !== "number") {
@@ -99,10 +96,7 @@ function requireNumber(
 /** Damage: applies stats.amount to every target in ctx.state.targets. */
 const damageEffect: AttackEffectDef = {
   kind: "damage",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["amount"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["amount"]),
   apply(ctx: AttackEffectContext): void {
     const amount = (ctx.effect.stats as { amount: number }).amount;
     for (const id of ctx.state.targets) {
@@ -123,10 +117,7 @@ const damageEffect: AttackEffectDef = {
 /** Splash: damages every enemy within stats.radius of the primary target's frozen position. */
 const splashEffect: AttackEffectDef = {
   kind: "splash",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["radius", "amount"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["radius", "amount"]),
   apply(ctx: AttackEffectContext): void {
     const { radius, amount } = ctx.effect.stats as { radius: number; amount: number };
     const impact = ctx.fire.primaryTarget.position;
@@ -156,12 +147,11 @@ const splashEffect: AttackEffectDef = {
 /** Slow: appends a slow status entry to each target's statusEffects. */
 const slowEffect: AttackEffectDef = {
   kind: "slow",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    const r = requireNumber(effect as AttackEffectConfig, ["factor", "duration"]);
+  validate(effect) {
+    const r = validateNumberStats(effect, ["factor", "duration"]);
     if (!r.ok) return r;
-    const stats = (effect as AttackEffectConfig).stats as { factor: number };
-    if (stats.factor <= 0 || stats.factor > 1) {
+    const { factor } = (effect as { stats: { factor: number } }).stats;
+    if (factor <= 0 || factor > 1) {
       return { ok: false, reason: "stats.factor must be in (0, 1]" };
     }
     return { ok: true };
@@ -193,14 +183,7 @@ const slowEffect: AttackEffectDef = {
 /** Dot: appends a dot status entry to each target. */
 const dotEffect: AttackEffectDef = {
   kind: "dot",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, [
-      "damagePerTick",
-      "interval",
-      "duration",
-    ]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["damagePerTick", "interval", "duration"]),
   apply(ctx: AttackEffectContext): void {
     const { damagePerTick, interval, duration } = ctx.effect.stats as {
       damagePerTick: number;
@@ -235,25 +218,15 @@ const dotEffect: AttackEffectDef = {
 /** Pierce: damages up to stats.maxTargets nearest enemies on the source→primary axis. */
 const pierceEffect: AttackEffectDef = {
   kind: "pierce",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["amount", "maxTargets"]);
-  },
-  apply(ctx: AttackEffectContext): void {
-    pierceLike(ctx, "pierceApplied");
-  },
+  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
+  apply: (ctx) => pierceLike(ctx, "pierceApplied"),
 };
 
 /** Line-pierce: long-line variant — same handler with the variant kind in events. */
 const linePierceEffect: AttackEffectDef = {
   kind: "line-pierce",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["amount", "maxTargets"]);
-  },
-  apply(ctx: AttackEffectContext): void {
-    pierceLike(ctx, "linePierceApplied");
-  },
+  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
+  apply: (ctx) => pierceLike(ctx, "linePierceApplied"),
 };
 
 function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
@@ -262,7 +235,10 @@ function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
   const primary = ctx.fire.primaryTarget.position;
   const dx = primary.x - src.x;
   const dy = primary.y - src.y;
-  const axis: "x" | "y" | "diag" = dx !== 0 && dy === 0 ? "x" : dx === 0 && dy !== 0 ? "y" : "diag";
+  let axis: "x" | "y" | "diag";
+  if (dx !== 0 && dy === 0) axis = "x";
+  else if (dx === 0 && dy !== 0) axis = "y";
+  else axis = "diag";
   const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
   const candidates = enemies
     .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
@@ -293,10 +269,7 @@ function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
 /** Bounce: chains hits to the nearest unstruck enemy up to stats.hops. */
 const bounceEffect: AttackEffectDef = {
   kind: "bounce",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["amount", "hops"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["amount", "hops"]),
   apply(ctx: AttackEffectContext): void {
     const { amount, hops } = ctx.effect.stats as { amount: number; hops: number };
     const struck = new Set<string>([ctx.fire.primaryTarget.id]);
@@ -334,10 +307,7 @@ const bounceEffect: AttackEffectDef = {
  */
 const minimumRangeEffect: AttackEffectDef = {
   kind: "minimum-range",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["range"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["range"]),
   apply(ctx: AttackEffectContext): void {
     const { range } = ctx.effect.stats as { range: number };
     const d = dist(ctx.fire.source.position, ctx.fire.primaryTarget.position);
@@ -363,10 +333,7 @@ const minimumRangeEffect: AttackEffectDef = {
  */
 const targetCountEffect: AttackEffectDef = {
   kind: "target-count",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["count"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["count"]),
   apply(ctx: AttackEffectContext): void {
     const { count } = ctx.effect.stats as { count: number };
     const from = ctx.fire.primaryTarget.position;
@@ -399,10 +366,7 @@ const targetCountEffect: AttackEffectDef = {
  */
 const projectileCountEffect: AttackEffectDef = {
   kind: "projectile-count",
-  validate(effect: unknown): AttackEffectValidationResult {
-    if (!isStatsObject(effect)) return { ok: false, reason: "not an object" };
-    return requireNumber(effect as AttackEffectConfig, ["count"]);
-  },
+  validate: (effect) => validateNumberStats(effect, ["count"]),
   apply(ctx: AttackEffectContext): void {
     const { count } = ctx.effect.stats as { count: number };
     ctx.emit({
