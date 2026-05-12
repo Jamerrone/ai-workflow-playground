@@ -7,7 +7,7 @@
     "doc": "docs"
   },
   "scripts": {
-    "sandcastle": "npx tsx .sandcastle/main.mts",
+    "sandcastle": "npx tsx .sandcastle/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

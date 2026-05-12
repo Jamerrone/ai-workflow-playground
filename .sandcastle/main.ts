@@ -15,9 +15,9 @@
 // gate) and the parallel-planner (concurrent execution with a planning phase).
 //
 // Usage:
-//   npx tsx .sandcastle/main.mts
+//   npx tsx .sandcastle/main.ts
 // Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.ts" }
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
@@ -28,7 +28,7 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 // Maximum number of implement→review cycles to run before stopping.
 // Each cycle works on one issue. Raise this to process more issues per run.
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 5;
 
 // Hooks run inside the sandbox before the agent starts each iteration.
 // npm install ensures the sandbox always has fresh dependencies.
@@ -72,8 +72,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // -----------------------------------------------------------------------
     const implement = await sandbox.run({
       name: "implementer",
-      maxIterations: 100,
-      agent: sandcastle.claudeCode("claude-opus-4-6"),
+      maxIterations: 1,
+      agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/implement-prompt.md",
     });
 
@@ -89,17 +89,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // Phase 2: Review
     //
     // A second sonnet agent reviews the diff of the branch produced by
-    // Phase 1. It uses the {{BRANCH}} prompt argument to inspect the right
+    // Phase 1. It uses the {{SOURCE_BRANCH}} prompt argument to inspect the right
     // branch, and either approves or makes corrections directly on the branch.
     // -----------------------------------------------------------------------
     await sandbox.run({
       name: "reviewer",
       maxIterations: 1,
-      agent: sandcastle.claudeCode("claude-opus-4-6"),
+      agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/review-prompt.md",
-      promptArgs: {
-        BRANCH: branch,
-      },
     });
 
     console.log("\nReview complete.");
