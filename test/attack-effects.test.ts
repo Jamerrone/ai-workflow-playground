@@ -84,7 +84,7 @@ function minimalStatsFor(kind: string): Record<string, number> {
     case "target-count":
       return { count: 2 };
     case "projectile-count":
-      return { count: 2 };
+      return { count: 2, speed: 5, maxRange: 20 };
     default:
       throw new Error(`unknown test kind ${kind}`);
   }
@@ -418,10 +418,10 @@ describe("attack-effects: pierce + line-pierce + bounce handlers", () => {
 });
 
 describe("attack-effects: projectile-count handler", () => {
-  it("emits projectileCountIntent (no projectile plugin yet, no spawn)", () => {
+  it("spawns projectile entities and emits projectilesSpawned", () => {
     const reg = buildEffectsRegistry();
     freezeWaves(reg);
-    setEffects(reg, [{ kind: "projectile-count", id: "pc", stats: { count: 3 } }]);
+    setEffects(reg, [{ kind: "projectile-count", id: "pc", stats: { count: 3, speed: 5, maxRange: 20 } }]);
     const events: GameEvent[] = [];
     const engine = createTestEngine(reg);
     engine.onEvent((e) => events.push(e));
@@ -430,11 +430,11 @@ describe("attack-effects: projectile-count handler", () => {
     engine.sendNextWave();
     engine.tick(0.1);
     engine.dispose();
-    const intent = events.find((e) => e.kind === "projectileCountIntent");
-    expect(intent).toBeDefined();
-    expect(intent!.count).toBe(3);
-    expect(intent!.attackId).toBe("shot");
-    expect(intent!.effectId).toBe("pc");
+    const spawned = events.find((e) => e.kind === "projectilesSpawned");
+    expect(spawned).toBeDefined();
+    expect(spawned!.count).toBe(3);
+    expect(spawned!.attackId).toBe("shot");
+    expect(spawned!.effectId).toBe("pc");
   });
 });
 

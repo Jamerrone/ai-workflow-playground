@@ -313,7 +313,7 @@ const ATTACK_EFFECT_REQUIRED_STATS = new Map<string, readonly string[]>([
   ["line-pierce", ["amount", "maxTargets"]],
   ["minimum-range", ["range"]],
   ["target-count", ["count"]],
-  ["projectile-count", ["count"]],
+  ["projectile-count", ["count", "speed", "maxRange"]],
 ]);
 
 function validateAttackEffectFields(
