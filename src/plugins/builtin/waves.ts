@@ -105,7 +105,11 @@ export const wavesPlugin: Plugin = {
             const spawnAt = path.waypoints[0];
             const enemyId = `enemy:${group.id}:${i}:${ctx.tickIndex}`;
             ctx.world.spawn(enemyId, {
-              enemy: { archetype: group.enemy, killReward: enemyDef.killReward },
+              enemy: {
+                archetype: group.enemy,
+                killReward: enemyDef.killReward,
+                tags: enemyDef.tags ?? [],
+              },
               position: { x: spawnAt.x, y: spawnAt.y },
               health: { hp: enemyDef.stats.hp },
               pathProgress: {
