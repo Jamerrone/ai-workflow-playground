@@ -93,7 +93,53 @@ export interface ActionContext {
   readonly scenarioId: string;
   readonly tickIndex: number;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
+  readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   emit(event: GameEvent): void;
+}
+
+export interface AttackEffectConfig {
+  readonly kind: string;
+  readonly id?: string;
+  readonly stats?: Readonly<Record<string, unknown>>;
+  readonly [extra: string]: unknown;
+}
+
+export interface AttackEffectFire {
+  readonly source: { readonly id: string; readonly position: Position };
+  readonly primaryTarget: { readonly id: string; readonly position: Position };
+  readonly attack: {
+    readonly id: string;
+    readonly stats: Readonly<Record<string, unknown>>;
+    readonly targetFilter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] };
+  };
+}
+
+export interface AttackEffectState {
+  /** Entity ids that subsequent effects in this fire will affect. */
+  targets: string[];
+  /** When true, the apply loop skips all remaining effects for this fire. */
+  abort: boolean;
+}
+
+export interface AttackEffectContext {
+  readonly tickIndex: number;
+  readonly dt: number;
+  readonly world: import("./kernel/world.js").World;
+  readonly registry: ConfigRegistry;
+  readonly fire: AttackEffectFire;
+  readonly effect: AttackEffectConfig;
+  readonly state: AttackEffectState;
+  emit(event: GameEvent): void;
+}
+
+export type AttackEffectValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface AttackEffectDef {
+  readonly kind: string;
+  validate(effect: unknown): AttackEffectValidationResult;
+  apply(ctx: AttackEffectContext): void;
 }
 
 export interface ActionHandlerDef<
@@ -113,6 +159,7 @@ export interface SystemContext {
   readonly registry: ConfigRegistry;
   readonly scenarioId: string | null;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
+  readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   emit(event: GameEvent): void;
 }
 
@@ -131,6 +178,7 @@ export interface RegistrationApi {
   registerSystem(def: SystemDef): void;
   registerActionHandler(def: ActionHandlerDef): void;
   registerPlacementMode(def: PlacementModeDef): void;
+  registerAttackEffect(def: AttackEffectDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }
 

@@ -1,12 +1,18 @@
 import { Phase, type Plugin, type Position } from "../../types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
+const PENDING_FIRES_ENTITY = "attack-effects/pending";
+const FIRES_COMPONENT = "pendingFires";
 
-interface PendingDamageEntry {
-  source: string;
-  target: string;
-  amount: number;
-  attackId: string;
+interface PendingFire {
+  source: { id: string; position: Position };
+  primaryTarget: { id: string; position: Position };
+  attack: {
+    id: string;
+    stats: Record<string, unknown>;
+    targetFilter?: { require?: string[]; exclude?: string[] };
+  };
+  effects: ReadonlyArray<{ kind: string; id?: string; stats?: Record<string, unknown> }>;
 }
 
 function dist(a: Position, b: Position): number {
@@ -24,17 +30,29 @@ function closestToBase(
   })[0];
 }
 
+function matchesFilter(
+  tags: readonly string[],
+  filter?: { require?: readonly string[]; exclude?: readonly string[] },
+): boolean {
+  if (!filter) return true;
+  if (filter.require && filter.require.length > 0) {
+    if (!filter.require.every((t) => tags.includes(t))) return false;
+  }
+  if (filter.exclude && filter.exclude.length > 0) {
+    if (filter.exclude.some((t) => tags.includes(t))) return false;
+  }
+  return true;
+}
+
 export const combatPlugin: Plugin = {
   id: "combat",
   register(api) {
-    api.registerComponent({ name: "pendingDamage", writableIn: [Phase.Simulation, Phase.Effect] });
-
-    // Firing: towers pick targets and queue damage effects.
+    // combat/fire: select targets and queue Fires for the attack-effects plugin to resolve.
     api.registerSystem({
       id: "combat/fire",
       phase: Phase.Simulation,
       reads: ["tower", "position", "enemy", "health"],
-      writes: ["cooldownTimer", "pendingDamage"],
+      writes: ["cooldownTimer", "pendingFires"],
       run(ctx) {
         if (!ctx.scenarioId) return;
         const scenario = (ctx.registry.scenarios as Record<string, any>)[ctx.scenarioId];
@@ -43,6 +61,12 @@ export const combatPlugin: Plugin = {
 
         const towers = ctx.world.query({ all: ["tower", "position", "cooldownTimer"] });
         const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
+
+        const pendingState = ctx.world.get(PENDING_FIRES_ENTITY);
+        const queue =
+          (pendingState?.components.get(FIRES_COMPONENT) as { queue: PendingFire[] } | undefined)
+            ?.queue ?? [];
+        const newFires: PendingFire[] = [];
 
         for (const tower of towers) {
           const towerArche = (tower.components.get("tower") as { archetype: string }).archetype;
@@ -54,58 +78,63 @@ export const combatPlugin: Plugin = {
             continue;
           }
           const towerPos = tower.components.get("position") as Position;
-          const attack = (towerDef.attacks as Array<any>)[0];
-          if (!attack) {
+          const attacks = (towerDef.attacks as Array<any>) ?? [];
+          if (attacks.length === 0) {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
             continue;
           }
-          const inRange = enemies.filter((e) => {
-            const ep = e.components.get("position") as Position;
-            return dist(ep, towerPos) <= attack.stats.range;
+          // Pick the highest-damage attack with at least one eligible in-range target.
+          const sortedAttacks = [...attacks].sort(
+            (a, b) => (b.stats.damage ?? 0) - (a.stats.damage ?? 0),
+          );
+          let firedAttack: any = null;
+          let firedTarget: ReturnType<typeof closestToBase> | undefined;
+          for (const attack of sortedAttacks) {
+            const eligible = enemies.filter((e) => {
+              const ep = e.components.get("position") as Position;
+              if (dist(ep, towerPos) > attack.stats.range) return false;
+              const tags = (e.components.get("enemy") as { tags?: string[] } | undefined)?.tags ?? [];
+              return matchesFilter(tags, attack.targetFilter);
+            });
+            if (eligible.length === 0) continue;
+            firedAttack = attack;
+            firedTarget = closestToBase(eligible, firstBase);
+            break;
+          }
+          if (!firedAttack || !firedTarget) {
+            ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
+            continue;
+          }
+
+          const targetPos = firedTarget.components.get("position") as Position;
+          newFires.push({
+            source: { id: tower.id, position: { ...towerPos } },
+            primaryTarget: { id: firedTarget.id, position: { ...targetPos } },
+            attack: {
+              id: firedAttack.id,
+              stats: { ...firedAttack.stats },
+              targetFilter: firedAttack.targetFilter,
+            },
+            effects: (firedAttack.effects as Array<any>) ?? [],
           });
-          if (inRange.length === 0) {
-            ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
-            continue;
-          }
-          const target = closestToBase(inRange, firstBase);
-          if (!target) continue;
-          const damageEffect = (attack.effects as Array<any>).find((e) => e.kind === "damage");
-          const amount = damageEffect?.stats?.amount ?? attack.stats.damage;
-          const existing =
-            (target.components.get("pendingDamage") as PendingDamageEntry[] | undefined) ?? [];
-          ctx.world.mutate(target.id, "pendingDamage", () => [
-            ...existing,
-            { source: tower.id, target: target.id, amount, attackId: attack.id },
-          ]);
           ctx.world.mutate(tower.id, "cooldownTimer", () => ({
-            remaining: attack.stats.cooldown,
+            remaining: firedAttack.stats.cooldown,
           }));
           ctx.emit({
             kind: "towerFired",
             tick: ctx.tickIndex,
             source: tower.id,
-            target: target.id,
+            target: firedTarget.id,
             sourcePosition: { ...towerPos },
-            targetPosition: { ...(target.components.get("position") as Position) },
+            targetPosition: { ...targetPos },
+            attackId: firedAttack.id,
           });
         }
-      },
-    });
 
-    // Effect resolution: apply pending damage to health.
-    api.registerSystem({
-      id: "kernel/effectResolve",
-      phase: Phase.Effect,
-      reads: ["pendingDamage", "health"],
-      writes: ["health", "pendingDamage"],
-      run(ctx) {
-        const targets = ctx.world.query({ all: ["pendingDamage", "health"] });
-        for (const t of targets) {
-          const queue = t.components.get("pendingDamage") as PendingDamageEntry[];
-          const hp = (t.components.get("health") as { hp: number }).hp;
-          const total = queue.reduce((s, e) => s + e.amount, 0);
-          ctx.world.mutate(t.id, "health", () => ({ hp: hp - total }));
-          ctx.world.mutate(t.id, "pendingDamage", () => []);
+        if (newFires.length > 0 && pendingState) {
+          ctx.world.mutate(PENDING_FIRES_ENTITY, FIRES_COMPONENT, () => ({
+            queue: [...queue, ...newFires],
+          }));
         }
       },
     });
@@ -149,4 +178,3 @@ export const combatPlugin: Plugin = {
     });
   },
 };
-
