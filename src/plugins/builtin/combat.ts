@@ -1,8 +1,9 @@
-import { Phase, type Plugin, type Position } from "../../types.js";
+import { Phase, type Plugin, type Position, type TargetingStrategyConfig } from "../../types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
 const FIRES_COMPONENT = "pendingFires";
+const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 
 interface PendingFire {
   source: { id: string; position: Position };
@@ -17,17 +18,6 @@ interface PendingFire {
 
 function dist(a: Position, b: Position): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-}
-
-function closestToBase(
-  enemies: Array<{ id: string; components: ReadonlyMap<string, unknown> }>,
-  basePos: Position,
-): { id: string; components: ReadonlyMap<string, unknown> } | undefined {
-  return [...enemies].sort((a, b) => {
-    const pa = a.components.get("position") as Position;
-    const pb = b.components.get("position") as Position;
-    return dist(pa, basePos) - dist(pb, basePos);
-  })[0];
 }
 
 function matchesFilter(
@@ -83,12 +73,19 @@ export const combatPlugin: Plugin = {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
             continue;
           }
+          const targetingConfig: TargetingStrategyConfig =
+            (towerDef.targeting as TargetingStrategyConfig | undefined) ??
+            (towerDef.strategy as TargetingStrategyConfig | undefined) ??
+            DEFAULT_TARGETING;
+          const strategy = ctx.targetingStrategies.get(targetingConfig.kind);
           // Pick the highest-damage attack with at least one eligible in-range target.
           const sortedAttacks = [...attacks].sort(
             (a, b) => (b.stats.damage ?? 0) - (a.stats.damage ?? 0),
           );
           let firedAttack: any = null;
-          let firedTarget: ReturnType<typeof closestToBase> | undefined;
+          let firedTarget:
+            | { id: string; components: ReadonlyMap<string, unknown> }
+            | undefined;
           for (const attack of sortedAttacks) {
             const eligible = enemies.filter((e) => {
               const ep = e.components.get("position") as Position;
@@ -97,8 +94,17 @@ export const combatPlugin: Plugin = {
               return matchesFilter(tags, attack.targetFilter);
             });
             if (eligible.length === 0) continue;
+            const picked = strategy
+              ? strategy.select({
+                  source: { id: tower.id, position: { ...towerPos } },
+                  basePosition: { ...firstBase },
+                  eligible,
+                  config: targetingConfig,
+                })
+              : undefined;
+            if (!picked) continue;
             firedAttack = attack;
-            firedTarget = closestToBase(eligible, firstBase);
+            firedTarget = picked;
             break;
           }
           if (!firedAttack || !firedTarget) {
