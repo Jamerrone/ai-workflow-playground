@@ -21,16 +21,8 @@ function checkScenarioRefs(
   for (const [sid, s] of Object.entries(input.scenarios ?? {})) {
     if (!isObject(s)) continue;
     const base = `scenarios.${sid}`;
-    if (typeof s.map === "string" && !ids.maps?.has(s.map)) {
-      errors.push(missingRef(`${base}.map`, "maps", s.map));
-    } else if (typeof s.map === "string" && abstract.get("maps")?.has(s.map)) {
-      errors.push(abstractRef(`${base}.map`, "maps", s.map));
-    }
-    if (typeof s.difficulty === "string" && !ids.difficulties?.has(s.difficulty)) {
-      errors.push(missingRef(`${base}.difficulty`, "difficulties", s.difficulty));
-    } else if (typeof s.difficulty === "string" && abstract.get("difficulties")?.has(s.difficulty)) {
-      errors.push(abstractRef(`${base}.difficulty`, "difficulties", s.difficulty));
-    }
+    checkScalarRef(`${base}.map`, "maps", s.map, ids, abstract, errors);
+    checkScalarRef(`${base}.difficulty`, "difficulties", s.difficulty, ids, abstract, errors);
     if (Array.isArray(s.waves)) {
       s.waves.forEach((entry, i) => {
         if (!isObject(entry)) return;
@@ -143,21 +135,13 @@ function checkUpgradeRefs(
         if (typeof op.effectId === "string" && typeof u.tower === "string") {
           const towerDef = input.towers?.[u.tower] as Record<string, unknown> | undefined;
           if (!towerDef) return;
-          let found = false;
-          if (Array.isArray(towerDef.attacks)) {
-            for (const atk of towerDef.attacks as unknown[]) {
-              if (!isObject(atk)) continue;
-              if (Array.isArray(atk.effects)) {
-                for (const eff of atk.effects as unknown[]) {
-                  if (isObject(eff) && eff.id === op.effectId) {
-                    found = true;
-                    break;
-                  }
-                }
-              }
-              if (found) break;
-            }
-          }
+          const attacks = Array.isArray(towerDef.attacks) ? (towerDef.attacks as unknown[]) : [];
+          const found = attacks.some(
+            (atk) =>
+              isObject(atk) &&
+              Array.isArray(atk.effects) &&
+              (atk.effects as unknown[]).some((eff) => isObject(eff) && eff.id === op.effectId),
+          );
           if (!found) {
             errors.push(
               missingRef(
@@ -181,7 +165,7 @@ function missingRef(path: string, registry: string, id: string): LoaderError {
     message: `Reference '${id}' does not exist in ${registry}.`,
     expected: `id present in ${registry}`,
     actual: id,
-    hint: `Check the id is spelled correctly and the entry is defined.`,
+    hint: "Check the id is spelled correctly and the entry is defined.",
   };
 }
 
@@ -195,4 +179,20 @@ function abstractRef(path: string, registry: string, id: string): LoaderError {
     actual: `${id} (abstract)`,
     hint: `Reference a concrete entry, or remove 'abstract: true' from '${id}'.`,
   };
+}
+
+function checkScalarRef(
+  path: string,
+  registry: string,
+  value: unknown,
+  ids: Record<string, Set<string>>,
+  abstract: ReadonlyMap<string, ReadonlySet<string>>,
+  errors: LoaderError[],
+): void {
+  if (typeof value !== "string") return;
+  if (!ids[registry]?.has(value)) {
+    errors.push(missingRef(path, registry, value));
+  } else if (abstract.get(registry)?.has(value)) {
+    errors.push(abstractRef(path, registry, value));
+  }
 }

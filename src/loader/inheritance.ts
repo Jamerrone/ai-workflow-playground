@@ -65,8 +65,9 @@ function resolveOne(
   }
   const raw = entries[id];
   if (!isObject(raw)) {
-    memo.set(id, raw as Record<string, unknown> ?? null);
-    return (raw as Record<string, unknown>) ?? null;
+    const passThrough = (raw ?? null) as Record<string, unknown> | null;
+    memo.set(id, passThrough);
+    return passThrough;
   }
   const parents = extractParents(raw, bucket);
   if (parents.length === 0) {
@@ -121,7 +122,9 @@ function extractParents(raw: Record<string, unknown>, childBucket: string): read
   const ext = raw.extends;
   if (typeof ext === "string") return [parseRef(ext, childBucket)];
   if (Array.isArray(ext)) {
-    return ext.filter((v) => typeof v === "string").map((s) => parseRef(s as string, childBucket));
+    return ext
+      .filter((v): v is string => typeof v === "string")
+      .map((s) => parseRef(s, childBucket));
   }
   return [];
 }
