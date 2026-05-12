@@ -80,13 +80,8 @@ export function buildRegistry(
 
   // Pass 6: strict mode promotes warnings to errors.
   if (options.strict && warnings.length > 0) {
-    const promoted: LoaderError[] = warnings.map((w) => ({ ...w, severity: "error" }));
-    const result: LoaderResult = {
-      ok: false,
-      errors: [...errors, ...promoted],
-      warnings,
-    };
-    return result;
+    const promoted = warnings.map((w): LoaderError => ({ ...w, severity: "error" }));
+    return { ok: false, errors: [...errors, ...promoted], warnings };
   }
 
   if (errors.length > 0) {
@@ -113,18 +108,9 @@ function buildValidatedRegistry(
   resolved: LoaderInput,
   abstractIds: ReadonlyMap<string, ReadonlySet<string>>,
 ): ConfigRegistry {
-  const out: Record<string, Record<string, unknown>> = {
-    components: {},
-    entityKinds: {},
-    maps: {},
-    towers: {},
-    enemies: {},
-    waves: {},
-    scenarios: {},
-    upgrades: {},
-    difficulties: {},
-    gameRules: {},
-  };
+  const out: Record<string, Record<string, unknown>> = Object.fromEntries(
+    BUCKETS.map((b) => [b, {} as Record<string, unknown>]),
+  );
   for (const bucket of BUCKETS) {
     const entries = resolved[bucket] ?? {};
     const absSet = abstractIds.get(bucket) ?? new Set<string>();
@@ -148,16 +134,16 @@ export function formatLoaderErrors(errors: readonly LoaderError[]): string {
 
 function formatOne(e: LoaderError): string {
   const head = `${e.severity.toUpperCase().padEnd(7)} ${e.code}`;
-  const sourceLine = e.source
-    ? `  ${e.source.file}${e.source.line !== undefined ? `:${e.source.line}` : ""}${e.source.col !== undefined ? `:${e.source.col}` : ""}`
-    : "";
-  const lines = [
-    head + (sourceLine ? sourceLine : ""),
-    `  ${e.path}`,
-    `  ${e.message}`,
-  ];
+  const lines = [head + formatSource(e.source), `  ${e.path}`, `  ${e.message}`];
   if (e.expected !== undefined) lines.push(`  expected: ${e.expected}`);
   if (e.actual !== undefined) lines.push(`  actual:   ${e.actual}`);
   if (e.hint !== undefined) lines.push(`  hint:     ${e.hint}`);
   return lines.join("\n");
+}
+
+function formatSource(source: LoaderError["source"]): string {
+  if (!source) return "";
+  const line = source.line !== undefined ? `:${source.line}` : "";
+  const col = source.col !== undefined ? `:${source.col}` : "";
+  return `  ${source.file}${line}${col}`;
 }
