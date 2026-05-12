@@ -6,6 +6,15 @@ import { combatPlugin } from "./combat.js";
 import { attackEffectsPlugin } from "./attack-effects.js";
 import { winLossPlugin } from "./win-loss.js";
 
+export {
+  attackEffectsPlugin,
+  combatPlugin,
+  movementPlugin,
+  towersPlugin,
+  wavesPlugin,
+  winLossPlugin,
+};
+
 export const builtInBundle: readonly Plugin[] = [
   towersPlugin,
   wavesPlugin,
@@ -14,10 +23,3 @@ export const builtInBundle: readonly Plugin[] = [
   combatPlugin,
   winLossPlugin,
 ];
-
-export { attackEffectsPlugin } from "./attack-effects.js";
-export { combatPlugin } from "./combat.js";
-export { movementPlugin } from "./movement.js";
-export { towersPlugin } from "./towers.js";
-export { wavesPlugin } from "./waves.js";
-export { winLossPlugin } from "./win-loss.js";
