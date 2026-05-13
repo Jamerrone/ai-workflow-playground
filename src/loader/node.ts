@@ -2,13 +2,14 @@
 // delegates to buildRegistry for validation. Keep this file isolated from the
 // shared engine entry (src/index.ts) so browser bundlers don't pull in `fs`.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { type Dirent, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { buildRegistry } from "./index.js";
 import {
   BUCKETS,
   type Bucket,
   type LoaderError,
+  type LoaderErrorSource,
   type LoaderOptions,
   type LoaderResult,
 } from "./types.js";
@@ -54,11 +55,7 @@ export function loadFromDirectory(
           severity: "error",
           code: "MALFORMED_JSON",
           path: entryPath,
-          source: line !== undefined && col !== undefined
-            ? { file, line, col }
-            : line !== undefined
-            ? { file, line }
-            : { file },
+          source: makeSource(file, line, col),
           message: `JSON parse failed: ${describeError(e)}.`,
           hint: "Fix the syntax error and re-run the Loader.",
         });
@@ -125,14 +122,14 @@ function isDirectory(p: string): boolean {
 }
 
 function* walkJsonFiles(dir: string): Generator<string> {
-  let entries: ReadonlyArray<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+  let entries: Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
   // Stable iteration order by entry name keeps the walk deterministic across platforms.
-  const sorted = [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const sorted = [...entries].sort(byName);
   for (const e of sorted) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
@@ -141,6 +138,18 @@ function* walkJsonFiles(dir: string): Generator<string> {
       yield full;
     }
   }
+}
+
+function byName(a: Dirent, b: Dirent): number {
+  if (a.name < b.name) return -1;
+  if (a.name > b.name) return 1;
+  return 0;
+}
+
+function makeSource(file: string, line?: number, col?: number): LoaderErrorSource {
+  if (line === undefined) return { file };
+  if (col === undefined) return { file, line };
+  return { file, line, col };
 }
 
 function basenameWithoutExt(file: string): string {
