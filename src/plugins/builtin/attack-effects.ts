@@ -269,22 +269,24 @@ function pierceReachable(
     .slice(0, maxTargets);
 }
 
+const pierceDamagePreview: NonNullable<AttackEffectDef["damagePreview"]> = (stats, fireContext) => {
+  const { amount, maxTargets } = stats as { amount?: number; maxTargets?: number };
+  if (typeof amount !== "number" || typeof maxTargets !== "number") return 0;
+  const reachable = pierceReachable(
+    fireContext.world,
+    fireContext.source.position,
+    fireContext.primaryTarget.position,
+    maxTargets,
+  );
+  return amount * reachable.length;
+};
+
 /** Pierce: damages up to stats.maxTargets nearest enemies on the source→primary axis. */
 const pierceEffect: AttackEffectDef = {
   kind: "pierce",
   validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
   apply: (ctx) => pierceLike(ctx, "pierceApplied"),
-  damagePreview(stats, fireContext) {
-    const { amount, maxTargets } = stats as { amount?: number; maxTargets?: number };
-    if (typeof amount !== "number" || typeof maxTargets !== "number") return 0;
-    const reachable = pierceReachable(
-      fireContext.world,
-      fireContext.source.position,
-      fireContext.primaryTarget.position,
-      maxTargets,
-    );
-    return amount * reachable.length;
-  },
+  damagePreview: pierceDamagePreview,
 };
 
 /** Line-pierce: long-line variant — same handler with the variant kind in events. */
@@ -292,17 +294,7 @@ const linePierceEffect: AttackEffectDef = {
   kind: "line-pierce",
   validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
   apply: (ctx) => pierceLike(ctx, "linePierceApplied"),
-  damagePreview(stats, fireContext) {
-    const { amount, maxTargets } = stats as { amount?: number; maxTargets?: number };
-    if (typeof amount !== "number" || typeof maxTargets !== "number") return 0;
-    const reachable = pierceReachable(
-      fireContext.world,
-      fireContext.source.position,
-      fireContext.primaryTarget.position,
-      maxTargets,
-    );
-    return amount * reachable.length;
-  },
+  damagePreview: pierceDamagePreview,
 };
 
 function pierceLike(ctx: AttackEffectContext, eventKind: string): void {

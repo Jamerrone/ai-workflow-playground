@@ -1,22 +1,21 @@
 import type {
-  AttackEffectDef,
   AttackSelectionCandidate,
   AttackSelectionContext,
   AttackSelectionStrategyDef,
+  DamagePreviewContext,
   Plugin,
 } from "../../types.js";
 
 function previewAttackDamage(
   attack: AttackSelectionCandidate,
   attackEffects: AttackSelectionContext["attackEffects"],
-  fireContext: Parameters<NonNullable<AttackEffectDef["damagePreview"]>>[1],
+  fireContext: DamagePreviewContext,
 ): number {
   let total = 0;
   for (const effect of attack.effects) {
     const def = attackEffects.get(effect.kind);
     if (!def?.damagePreview) continue;
-    const stats = effect.stats ?? {};
-    total += def.damagePreview(stats, fireContext);
+    total += def.damagePreview(effect.stats ?? {}, fireContext);
   }
   return total;
 }
