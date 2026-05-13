@@ -56,6 +56,18 @@ export const towersPlugin: Plugin = {
     // reports TOWER_ALREADY_SOLD rather than the more generic UNKNOWN_TOWER.
     api.registerComponent({ name: "soldTowers", writableIn: PHASE_ORDER });
 
+    api.registerEntityKind({
+      kind: "tower",
+      components: [
+        "tower",
+        "position",
+        "cooldownTimer",
+        "attacks",
+        "purchasedUpgrades",
+        "targeting",
+      ],
+    });
+
     // Built-in PlacementMode: fixed. Placement is legal only on a pre-declared TowerSlot.
     api.registerPlacementMode({
       kind: "fixed",

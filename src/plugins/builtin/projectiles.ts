@@ -36,6 +36,11 @@ export const projectilesPlugin: Plugin = {
   register(api) {
     api.registerComponent({ name: PROJECTILE_COMPONENT, writableIn: PHASE_ORDER });
 
+    api.registerEntityKind({
+      kind: "projectile",
+      components: [PROJECTILE_COMPONENT, "position"],
+    });
+
     api.registerAttackEffect({
       kind: "projectile-count",
       validate: (effect) => validateNumberStats(effect, ["count", "speed", "maxRange"]),
