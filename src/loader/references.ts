@@ -156,9 +156,9 @@ function checkUpgradeRefs(
       });
     }
   }
-  // Pass 2: prerequisite cycle detection. Build a directed graph where edges go
-  // child → prerequisite, then DFS for back-edges. Report each cycle once via the
-  // smallest entry-point id, so a 2-cycle "a ↔ b" emits a single UPGRADE_PREREQ_CYCLE.
+  // Pass 2: prerequisite cycle detection via DFS for back-edges. Dedupe by the
+  // sorted set of nodes on the cycle path so a 2-cycle "a ↔ b" emits a single
+  // UPGRADE_PREREQ_CYCLE regardless of which side we entered from.
   const reportedCycles = new Set<string>();
   for (const uid of Object.keys(upgrades)) {
     detectCycle(uid, upgrades, reportedCycles, errors);

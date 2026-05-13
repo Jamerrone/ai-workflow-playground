@@ -406,7 +406,7 @@ describe("upgrades: failure codes", () => {
 });
 
 describe("upgrades: live-fire integration", () => {
-  it("after 'stat' on attack damage, the tower's next fire applies the higher amount", () => {
+  it("after 'attackMutation' lowers cooldown, the tower fires more often", () => {
     const reg = buildUpgradesRegistry();
     (reg.enemies as any).grunt.stats.speed = 0;
     (reg.enemies as any).grunt.stats.hp = 1000;

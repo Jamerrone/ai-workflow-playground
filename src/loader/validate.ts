@@ -302,6 +302,24 @@ function validateUpgrade(ctx: ValidationContext, id: string, raw: Record<string,
   }
 }
 
+function requireStringField(
+  ctx: ValidationContext,
+  op: Record<string, unknown>,
+  path: string,
+  kind: string,
+  field: string,
+): void {
+  if (typeof op[field] === "string") return;
+  ctx.errors.push({
+    severity: "error",
+    code: "INVALID_FIELD",
+    path: `${path}.${field}`,
+    message: `Upgrade op '${kind}' is missing '${field}'.`,
+    expected: "string",
+    actual: typeof op[field],
+  });
+}
+
 function validateUpgradeOpFields(
   ctx: ValidationContext,
   op: Record<string, unknown>,
@@ -310,29 +328,9 @@ function validateUpgradeOpFields(
   const kind = op.kind;
   if (typeof kind !== "string") return;
   if (kind === "stat") {
-    if (typeof op.attackId !== "string") {
-      ctx.errors.push({
-        severity: "error",
-        code: "INVALID_FIELD",
-        path: `${path}.attackId`,
-        message: `Upgrade op 'stat' is missing 'attackId'.`,
-        expected: "string",
-        actual: typeof op.attackId,
-      });
-    }
-    if (typeof op.field !== "string") {
-      ctx.errors.push({
-        severity: "error",
-        code: "INVALID_FIELD",
-        path: `${path}.field`,
-        message: `Upgrade op 'stat' is missing 'field'.`,
-        expected: "string",
-        actual: typeof op.field,
-      });
-    }
-    const hasDelta = typeof op.delta === "number";
-    const hasFactor = typeof op.factor === "number";
-    if (!hasDelta && !hasFactor) {
+    requireStringField(ctx, op, path, kind, "attackId");
+    requireStringField(ctx, op, path, kind, "field");
+    if (typeof op.delta !== "number" && typeof op.factor !== "number") {
       ctx.errors.push({
         severity: "error",
         code: "INVALID_FIELD",
@@ -343,26 +341,8 @@ function validateUpgradeOpFields(
       });
     }
   } else if (kind === "attackMutation") {
-    if (typeof op.attackId !== "string") {
-      ctx.errors.push({
-        severity: "error",
-        code: "INVALID_FIELD",
-        path: `${path}.attackId`,
-        message: `Upgrade op 'attackMutation' is missing 'attackId'.`,
-        expected: "string",
-        actual: typeof op.attackId,
-      });
-    }
-    if (typeof op.field !== "string") {
-      ctx.errors.push({
-        severity: "error",
-        code: "INVALID_FIELD",
-        path: `${path}.field`,
-        message: `Upgrade op 'attackMutation' is missing 'field'.`,
-        expected: "string",
-        actual: typeof op.field,
-      });
-    }
+    requireStringField(ctx, op, path, kind, "attackId");
+    requireStringField(ctx, op, path, kind, "field");
     if (!("set" in op)) {
       ctx.errors.push({
         severity: "error",

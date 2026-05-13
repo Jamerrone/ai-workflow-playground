@@ -1,6 +1,7 @@
 import { actionFailure } from "../../kernel/action-result.js";
 import {
   type ActionContext,
+  type ActionResult,
   type Plugin,
   type PurchaseUpgradeAction,
   type UpgradeOpContext,
@@ -69,6 +70,21 @@ function validateStatOp(op: unknown): UpgradeOpValidationResult {
   return { ok: true };
 }
 
+function mutateAttackStats(
+  ctx: UpgradeOpContext,
+  attackId: string,
+  effectId: string | undefined,
+  mutator: (stats: Record<string, number>) => void,
+): void {
+  const current = ctx.tower.components.get("attacks") as AttackConfig[] | undefined;
+  if (!current) return;
+  const next = structuredClone(current);
+  const stats = resolveTargetStats(next, attackId, effectId);
+  if (!stats) return;
+  mutator(stats);
+  ctx.world.mutate(ctx.tower.id, "attacks", () => next);
+}
+
 function applyStatOp(ctx: UpgradeOpContext): void {
   const op = ctx.op as {
     attackId: string;
@@ -77,14 +93,10 @@ function applyStatOp(ctx: UpgradeOpContext): void {
     factor?: number;
     effectId?: string;
   };
-  const current = ctx.tower.components.get("attacks") as AttackConfig[] | undefined;
-  if (!current) return;
-  const next = structuredClone(current);
-  const stats = resolveTargetStats(next, op.attackId, op.effectId);
-  if (!stats) return;
-  const v = typeof stats[op.field] === "number" ? stats[op.field]! : 0;
-  stats[op.field] = op.delta !== undefined ? v + op.delta : v * (op.factor ?? 1);
-  ctx.world.mutate(ctx.tower.id, "attacks", () => next);
+  mutateAttackStats(ctx, op.attackId, op.effectId, (stats) => {
+    const v = typeof stats[op.field] === "number" ? stats[op.field]! : 0;
+    stats[op.field] = op.delta !== undefined ? v + op.delta : v * (op.factor ?? 1);
+  });
 }
 
 function validateAttackMutationOp(op: unknown): UpgradeOpValidationResult {
@@ -105,13 +117,9 @@ function applyAttackMutationOp(ctx: UpgradeOpContext): void {
     set: unknown;
     effectId?: string;
   };
-  const current = ctx.tower.components.get("attacks") as AttackConfig[] | undefined;
-  if (!current) return;
-  const next = structuredClone(current);
-  const stats = resolveTargetStats(next, op.attackId, op.effectId);
-  if (!stats) return;
-  stats[op.field] = op.set as number;
-  ctx.world.mutate(ctx.tower.id, "attacks", () => next);
+  mutateAttackStats(ctx, op.attackId, op.effectId, (stats) => {
+    stats[op.field] = op.set as number;
+  });
 }
 
 const statOp: UpgradeOpDef = {
@@ -126,7 +134,10 @@ const attackMutationOp: UpgradeOpDef = {
   apply: applyAttackMutationOp,
 };
 
-function purchaseHandler(ctx: ActionContext, action: PurchaseUpgradeAction) {
+function purchaseHandler(
+  ctx: ActionContext,
+  action: PurchaseUpgradeAction,
+): ActionResult {
   const upgrades = ctx.registry.upgrades as Record<string, UpgradeConfig | undefined>;
   const towerEntity = ctx.world.get(action.tower);
   if (!towerEntity || !towerEntity.components.has("tower")) {
@@ -197,7 +208,7 @@ function purchaseHandler(ctx: ActionContext, action: PurchaseUpgradeAction) {
       );
     }
   }
-  let towerSnapshot = ctx.world.get(action.tower)!;
+  let towerSnapshot = towerEntity;
   for (const op of ops) {
     const def = ctx.upgradeOps.get((op as { kind: string }).kind)!;
     def.apply({
@@ -230,7 +241,7 @@ function purchaseHandler(ctx: ActionContext, action: PurchaseUpgradeAction) {
     amount: newGold,
   });
 
-  return { ok: true as const, effect: { tower: action.tower, upgrade: action.upgrade, gold: newGold } };
+  return { ok: true, effect: { tower: action.tower, upgrade: action.upgrade, gold: newGold } };
 }
 
 export const upgradesPlugin: Plugin = {
