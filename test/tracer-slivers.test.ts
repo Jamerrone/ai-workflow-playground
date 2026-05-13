@@ -113,8 +113,8 @@ describe("tracer slivers", () => {
       // Both die; ordering proves closest-to-base picked first (the one spawned earliest
       // has the most progress, i.e. is closer to base).
       expect(kills.length).toBe(2);
-      expect(kills[0]!.enemy).toMatch(/g1:0:/);
-      expect(kills[1]!.enemy).toMatch(/g1:1:/);
+      expect(kills[0]!.enemy).toMatch(/g1:p1:0:/);
+      expect(kills[1]!.enemy).toMatch(/g1:p1:1:/);
     });
   });
 

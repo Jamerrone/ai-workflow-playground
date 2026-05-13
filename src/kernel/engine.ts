@@ -21,6 +21,8 @@ import {
   type Plugin,
   type Position,
   type RegistrationApi,
+  type RewardContext,
+  type RewardKindDef,
   type ScenarioLoadHook,
   type SystemDef,
   type TargetingStrategyDef,
@@ -33,6 +35,7 @@ interface Registries {
   actionHandlers: Map<string, ActionHandlerDef>;
   placementModes: Map<string, PlacementModeDef>;
   attackEffects: Map<string, AttackEffectDef>;
+  rewardsByEventKind: Map<string, RewardKindDef[]>;
   targetingStrategies: Map<string, TargetingStrategyDef>;
   upgradeOps: Map<string, UpgradeOpDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
@@ -46,6 +49,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const actionHandlers = new Map<string, ActionHandlerDef>();
   const placementModes = new Map<string, PlacementModeDef>();
   const attackEffects = new Map<string, AttackEffectDef>();
+  const rewardsByEventKind = new Map<string, RewardKindDef[]>();
   const targetingStrategies = new Map<string, TargetingStrategyDef>();
   const upgradeOps = new Map<string, UpgradeOpDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
@@ -66,6 +70,14 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerAttackEffect(def) {
       attackEffects.set(def.kind, def);
     },
+    registerReward(def) {
+      let list = rewardsByEventKind.get(def.eventKind);
+      if (!list) {
+        list = [];
+        rewardsByEventKind.set(def.eventKind, list);
+      }
+      list.push(def);
+    },
     registerTargetingStrategy(def) {
       targetingStrategies.set(def.kind, def);
     },
@@ -83,6 +95,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     actionHandlers,
     placementModes,
     attackEffects,
+    rewardsByEventKind,
     targetingStrategies,
     upgradeOps,
     scenarioLoadHooks,
@@ -99,6 +112,7 @@ export function createEngine(
     actionHandlers,
     placementModes,
     attackEffects,
+    rewardsByEventKind,
     targetingStrategies,
     upgradeOps,
     scenarioLoadHooks,
@@ -116,10 +130,25 @@ export function createEngine(
   let pending: GameEvent[] = [];
 
   const flushTickEvents = () => {
-    if (pending.length === 0) return;
-    const toDeliver = pending;
-    pending = [];
-    for (const event of toDeliver) deliver(event);
+    while (pending.length > 0) {
+      const batch = pending;
+      pending = [];
+      for (const event of batch) {
+        const rewards = rewardsByEventKind.get(event.kind);
+        if (rewards && rewards.length > 0) {
+          const rewardCtx: RewardContext = {
+            world,
+            registry,
+            tickIndex,
+            emit(e: GameEvent) {
+              pending.push(e);
+            },
+          };
+          for (const r of rewards) r.apply(rewardCtx, event);
+        }
+        deliver(event);
+      }
+    }
   };
 
   const deliver = (event: GameEvent) => {

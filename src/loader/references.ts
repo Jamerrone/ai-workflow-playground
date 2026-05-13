@@ -37,17 +37,19 @@ function checkScenarioRefs(
           errors.push(abstractRef(wpath, "waves", wid));
           return;
         }
-        // Validate pathBindings → map.paths and group ids → wave.groups
-        const bindings = entry.pathBindings;
-        if (!isObject(bindings)) return;
+        // Validate pathBindings — three shapes: undefined (use defaultPath), "*" (all
+        // paths for all groups), or { groupId: pathId | "*" } per-group map. Per
+        // ADR-0009 the per-wave bindings live next to the wave reference.
         const mapId = typeof s.map === "string" ? s.map : null;
         const mapDef = mapId ? (input.maps?.[mapId] as Record<string, unknown> | undefined) : undefined;
         const pathIds = new Set<string>();
         const pathKindById = new Map<string, string>();
+        const allPaths: string[] = [];
         if (mapDef && Array.isArray(mapDef.paths)) {
           for (const p of mapDef.paths as unknown[]) {
             if (isObject(p) && typeof p.id === "string") {
               pathIds.add(p.id);
+              allPaths.push(p.id);
               if (typeof p.kind === "string") pathKindById.set(p.id, p.kind);
             }
           }
@@ -61,31 +63,83 @@ function checkScenarioRefs(
             }
           }
         }
-        for (const [gid, pid] of Object.entries(bindings)) {
+        const defaultPath = typeof s.defaultPath === "string" ? s.defaultPath : null;
+
+        const resolveBoundPaths = (gid: string): { ok: true; paths: string[] } | { ok: false } => {
+          const bindings = entry.pathBindings;
+          if (bindings === undefined) {
+            if (defaultPath === null) return { ok: false };
+            return { ok: true, paths: [defaultPath] };
+          }
+          if (typeof bindings === "string") {
+            if (bindings === "*") return { ok: true, paths: [...allPaths] };
+            return { ok: true, paths: [bindings] };
+          }
+          if (isObject(bindings)) {
+            const value = (bindings as Record<string, unknown>)[gid];
+            if (value === undefined) {
+              if (defaultPath === null) return { ok: false };
+              return { ok: true, paths: [defaultPath] };
+            }
+            if (typeof value !== "string") return { ok: false };
+            if (value === "*") return { ok: true, paths: [...allPaths] };
+            return { ok: true, paths: [value] };
+          }
+          return { ok: false };
+        };
+
+        // 1. Per-group object bindings: every key must reference an existing group.
+        if (isObject(entry.pathBindings)) {
+          for (const gid of Object.keys(entry.pathBindings)) {
+            if (!groupIdToEnemy.has(gid)) {
+              errors.push(
+                missingRef(
+                  `${base}.waves[${i}].pathBindings.${gid}`,
+                  `waves.${wid}.groups`,
+                  gid,
+                ),
+              );
+            }
+          }
+        }
+
+        // 2. Every group on the referenced Wave must resolve to at least one valid path,
+        //    and each bound Path must exist on the Map; the bound Enemy must carry the
+        //    Path's kind as a tag.
+        for (const [gid, enemyId] of groupIdToEnemy) {
+          const resolved = resolveBoundPaths(gid);
           const bp = `${base}.waves[${i}].pathBindings.${gid}`;
-          if (!groupIdToEnemy.has(gid)) {
-            errors.push(missingRef(bp, `waves.${wid}.groups`, gid));
-            continue;
-          }
-          if (typeof pid !== "string" || pid === "*") continue;
-          if (!pathIds.has(pid)) {
-            errors.push(missingRef(bp, `maps.${mapId}.paths`, pid));
-            continue;
-          }
-          const enemyId = groupIdToEnemy.get(gid)!;
-          const enemyDef = input.enemies?.[enemyId] as Record<string, unknown> | undefined;
-          const tags = Array.isArray(enemyDef?.tags) ? (enemyDef!.tags as unknown[]) : [];
-          const pathKind = pathKindById.get(pid);
-          if (pathKind && !tags.includes(pathKind)) {
+          if (!resolved.ok || resolved.paths.length === 0) {
             errors.push({
               severity: "error",
-              code: "PATH_BINDING_TAG_MISMATCH",
+              code: "MISSING_BINDING",
               path: bp,
-              message: `Group '${gid}' enemy '${enemyId}' lacks tag '${pathKind}' required by path '${pid}'.`,
-              expected: `enemy.tags includes '${pathKind}'`,
-              actual: `tags: [${tags.map((t) => `'${String(t)}'`).join(", ")}]`,
-              hint: `Add '${pathKind}' to enemy '${enemyId}'.tags or bind this group to a different path.`,
+              message: `Group '${gid}' has no path binding and the Scenario has no 'defaultPath' fallback.`,
+              expected: "explicit binding or scenario.defaultPath",
+              actual: "no binding",
+              hint: `Add a binding for '${gid}' or set 'defaultPath' on the Scenario.`,
             });
+            continue;
+          }
+          const enemyDef = input.enemies?.[enemyId] as Record<string, unknown> | undefined;
+          const tags = Array.isArray(enemyDef?.tags) ? (enemyDef!.tags as unknown[]) : [];
+          for (const pid of resolved.paths) {
+            if (!pathIds.has(pid)) {
+              errors.push(missingRef(bp, `maps.${mapId}.paths`, pid));
+              continue;
+            }
+            const pathKind = pathKindById.get(pid);
+            if (pathKind && !tags.includes(pathKind)) {
+              errors.push({
+                severity: "error",
+                code: "PATH_BINDING_TAG_MISMATCH",
+                path: bp,
+                message: `Group '${gid}' enemy '${enemyId}' lacks tag '${pathKind}' required by path '${pid}'.`,
+                expected: `enemy.tags includes '${pathKind}'`,
+                actual: `tags: [${tags.map((t) => `'${String(t)}'`).join(", ")}]`,
+                hint: `Add '${pathKind}' to enemy '${enemyId}'.tags or bind this group to a different path.`,
+              });
+            }
           }
         }
       });
