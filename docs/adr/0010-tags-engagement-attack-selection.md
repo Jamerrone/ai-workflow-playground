@@ -18,9 +18,9 @@ Aerial Paths are not a special case. The standard rule produces every expected b
 
 An entity's engagement range is the union of its Attacks' `range` stats — no separate `engagementRadius` config. A unit with a melee Attack (range 1) and a ranged Attack (range 4) engages within 4 tiles, fires the ranged Attack at distance, switches to melee when in close.
 
-## Attack selection: one per tick, highest damage
+## Attack selection: one per tick, via AttackSelectionStrategy
 
-Each tick, every attacker picks the highest-damage Attack whose `targetFilter` accepts an in-range target *and* is off cooldown. Exactly one Attack fires per tick per attacker. The next tick re-evaluates from scratch — the previously fired Attack is typically on cooldown, so a different Attack will win the selection.
+Each tick, every attacker picks one of its off-cooldown Attacks whose `targetFilter` accepts an in-range target. Exactly one Attack fires per tick per attacker. The choice among eligible Attacks is the **AttackSelectionStrategy** registry (see [ADR-0019](0019-attack-selection-strategy.md)); built-in strategies are `declaration-order` (default) and `highest-damage`.
 
 Per-Attack cooldowns are the spam-control mechanism. The engine enforces no global cooldown; a plugin can layer entity-level cooldown if a specific game needs it.
 
@@ -30,3 +30,4 @@ Per-Attack cooldowns are the spam-control mechanism. The engine enforces no glob
 - **An "aerial Paths bypass Guards regardless" special case.** Forecloses hostile-aerial-escort gameplay; the standard engagement rule produces the same default behavior with strictly more expressive power.
 - **An engine-level global cooldown.** Per-Attack cooldowns plus one-per-tick selection are sufficient; plugins can layer more if a game demands it.
 - **Healing via negative-damage Attacks.** Breaks event semantics (`enemyDamaged` with `damage: -10` is incoherent for renderers and analytics), conflates with damage-modifying plugins, and has weird edge cases (healing a 0-hp entity). Use a registered `heal` AttackEffect instead.
+- **A hardcoded `damage`-stat-sort attack-selection rule.** Originally the combat plugin sorted Attacks by an Attack-level `stats.damage` field. That field was uncoupled from the Attack's effects (authors could lie) and forbade pluggable selection rules. Replaced by the AttackSelectionStrategy registry; see [ADR-0019](0019-attack-selection-strategy.md).

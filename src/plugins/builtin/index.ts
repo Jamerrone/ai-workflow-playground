@@ -6,12 +6,14 @@ import { combatPlugin } from "./combat.js";
 import { attackEffectsPlugin } from "./attack-effects.js";
 import { projectilesPlugin } from "./projectiles.js";
 import { targetingStrategiesPlugin } from "./targeting-strategies.js";
+import { attackSelectionStrategiesPlugin } from "./attack-selection-strategies.js";
 import { upgradesPlugin } from "./upgrades.js";
 import { winLossPlugin } from "./win-loss.js";
 import { mapFeaturesPlugin } from "./map-features.js";
 
 export {
   attackEffectsPlugin,
+  attackSelectionStrategiesPlugin,
   combatPlugin,
   mapFeaturesPlugin,
   movementPlugin,
@@ -31,6 +33,7 @@ export const builtInBundle: readonly Plugin[] = [
   attackEffectsPlugin,
   projectilesPlugin,
   targetingStrategiesPlugin,
+  attackSelectionStrategiesPlugin,
   combatPlugin,
   upgradesPlugin,
   winLossPlugin,

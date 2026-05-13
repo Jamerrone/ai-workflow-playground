@@ -30,7 +30,7 @@ export function buildTracerRegistry(): ConfigRegistry {
         attacks: [
           {
             id: "shot",
-            stats: { damage: 10, range: 3, cooldown: 0.5 },
+            stats: { range: 3, cooldown: 0.5 },
             targetFilter: { require: [], exclude: [] },
             effects: [{ kind: "damage", stats: { amount: 10 } }],
           },

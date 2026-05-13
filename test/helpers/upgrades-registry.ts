@@ -31,7 +31,7 @@ export function buildUpgradesRegistry(): ConfigRegistry {
         attacks: [
           {
             id: "shot",
-            stats: { damage: 5, range: 9, cooldown: 1 },
+            stats: { range: 9, cooldown: 1 },
             targetFilter: { require: [], exclude: [] },
             effects: [{ kind: "damage", id: "main", stats: { amount: 5 } }],
           },
@@ -63,7 +63,7 @@ export function buildUpgradesRegistry(): ConfigRegistry {
         tower: "archer",
         cost: 30,
         ops: [
-          { kind: "stat", attackId: "shot", field: "damage", delta: 10 },
+          { kind: "stat", attackId: "shot", effectId: "main", field: "amount", delta: 10 },
         ],
       },
       "rapid-fire": {
@@ -94,7 +94,7 @@ export function buildUpgradesRegistry(): ConfigRegistry {
         cost: 10,
         prerequisites: ["damage-boost"],
         ops: [
-          { kind: "stat", attackId: "shot", field: "damage", factor: 2 },
+          { kind: "stat", attackId: "shot", effectId: "main", field: "amount", factor: 2 },
         ],
       },
     },
