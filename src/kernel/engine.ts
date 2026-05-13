@@ -1,7 +1,7 @@
 import { actionFailure } from "./action-result.js";
 import { EngineDisposedError } from "./errors.js";
 import { resolveSystemOrder } from "./ordering.js";
-import { serializeWorld } from "./snapshot.js";
+import { deserializeWorld, serializeWorld } from "./snapshot.js";
 import { WorldImpl } from "./world.js";
 import {
   PHASE_ORDER,
@@ -25,6 +25,8 @@ import {
   type RegistrationApi,
   type RewardContext,
   type RewardKindDef,
+  type SaveOptions,
+  type SavedState,
   type ScenarioLoadHook,
   type SystemDef,
   type TargetingStrategyConfig,
@@ -178,6 +180,8 @@ export function createEngine(
   let disposed = false;
   let tickIndex = 0;
   let activeScenarioId: string | null = null;
+  let tickHistory: number[] = [];
+  let actionHistory: Array<[number, PlayerAction]> = [];
   const assertAlive = () => {
     if (disposed) throw new EngineDisposedError();
   };
@@ -212,6 +216,9 @@ export function createEngine(
         `No PlayerActionHandler is registered for kind '${action.kind}'.`,
       );
     }
+    // Record before applying so the transcript reflects the player's input as
+    // submitted, regardless of action outcome (ADR-0018 transcript bundle).
+    actionHistory.push([tickIndex, action]);
     const result = handler.handle(buildActionContext(), action);
     flushEvents();
     return result;
@@ -244,6 +251,7 @@ export function createEngine(
       }
       world.setPhase(null);
       flushEvents();
+      tickHistory.push(dt);
       tickIndex++;
     },
     dispose() {
@@ -287,6 +295,8 @@ export function createEngine(
       activeScenarioId = scenarioId;
       tickIndex = 0;
       pending = [];
+      tickHistory = [];
+      actionHistory = [];
       world.reset();
       // Plugins set up their per-Scenario state. Kernel ships no gameplay.
       const ctx = buildActionContext();
@@ -313,6 +323,70 @@ export function createEngine(
     snapshot() {
       assertAlive();
       return serializeWorld(world, tickIndex);
+    },
+    saveState(saveOptions?: SaveOptions): SavedState {
+      assertAlive();
+      if (activeScenarioId === null) {
+        throw new Error("No scenario is currently active.");
+      }
+      const format = saveOptions?.format ?? "snapshot";
+      // Build bundles with a fixed insertion order so JSON.stringify is byte-stable.
+      if (format === "snapshot") {
+        return {
+          format: "snapshot",
+          scenarioId: activeScenarioId,
+          tickIndex,
+          seed: options.seed,
+          world: serializeWorld(world, tickIndex),
+        };
+      }
+      return {
+        format: "transcript",
+        scenarioId: activeScenarioId,
+        tickIndex,
+        seed: options.seed,
+        ticks: [...tickHistory],
+        actions: actionHistory.map(([t, a]) => [t, a] as [number, PlayerAction]),
+      };
+    },
+    loadState(bundle: SavedState): void {
+      assertAlive();
+      if (bundle.format === "snapshot") {
+        // Mid-Scenario loadState implicitly ends the previous Scenario (ADR-0018).
+        const scenario = (registry.scenarios as Record<string, unknown>)[bundle.scenarioId];
+        if (!scenario) {
+          throw new Error(`Unknown scenario '${bundle.scenarioId}'`);
+        }
+        activeScenarioId = bundle.scenarioId;
+        tickIndex = bundle.tickIndex;
+        pending = [];
+        tickHistory = [];
+        actionHistory = [];
+        world.reset();
+        const deserialised = deserializeWorld(bundle.world);
+        for (const e of deserialised.entities) {
+          world.spawn(e.id, { ...e.components });
+        }
+        return;
+      }
+      // transcript path: replay the recorded actions and tick deltas.
+      this.loadScenario(bundle.scenarioId);
+      let actionCursor = 0;
+      const dispatchActionsAt = (tick: number): void => {
+        while (
+          actionCursor < bundle.actions.length &&
+          bundle.actions[actionCursor]![0] === tick
+        ) {
+          dispatch(bundle.actions[actionCursor]![1]);
+          actionCursor++;
+        }
+      };
+      for (let i = 0; i < bundle.ticks.length; i++) {
+        dispatchActionsAt(i);
+        this.tick(bundle.ticks[i]!);
+      }
+      // Drain actions submitted at the final tickIndex (post-last-tick).
+      dispatchActionsAt(bundle.tickIndex);
     },
   };
 }

@@ -361,6 +361,33 @@ export interface EngineOptions {
   seed: number;
 }
 
+export interface SnapshotBundle {
+  readonly format: "snapshot";
+  readonly scenarioId: string;
+  readonly tickIndex: number;
+  readonly seed: number;
+  /** Canonical-JSON serialised world; same bytes as `engine.snapshot()` produces. */
+  readonly world: string;
+}
+
+export interface TranscriptBundle {
+  readonly format: "transcript";
+  readonly scenarioId: string;
+  readonly tickIndex: number;
+  readonly seed: number;
+  /** Per-tick dt sequence — `ticks[i]` is the dt passed to the i-th tick after loadScenario. */
+  readonly ticks: readonly number[];
+  /** Recorded actions indexed by the tickIndex they were dispatched at, in dispatch order. */
+  readonly actions: ReadonlyArray<readonly [number, PlayerAction]>;
+}
+
+export type SavedState = SnapshotBundle | TranscriptBundle;
+
+export interface SaveOptions {
+  /** Which bundle format to produce. Default: `"snapshot"` (direct restore, ADR-0018). */
+  readonly format?: "snapshot" | "transcript";
+}
+
 export interface Engine {
   tick(dt: number): void;
   dispose(): void;
@@ -377,4 +404,6 @@ export interface Engine {
     strategy: string | TargetingStrategyConfig,
   ): ActionResult;
   snapshot(): string;
+  saveState(options?: SaveOptions): SavedState;
+  loadState(bundle: SavedState): void;
 }

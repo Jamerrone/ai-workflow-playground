@@ -36,3 +36,18 @@ export function serializeWorld(world: WorldImpl, tickIndex: number): string {
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return canonical({ tick: tickIndex, entities });
 }
+
+interface DeserializedEntity {
+  readonly id: string;
+  readonly components: Record<string, unknown>;
+}
+
+export interface DeserializedWorld {
+  readonly tick: number;
+  readonly entities: ReadonlyArray<DeserializedEntity>;
+}
+
+export function deserializeWorld(serialised: string): DeserializedWorld {
+  const parsed = JSON.parse(serialised) as DeserializedWorld;
+  return parsed;
+}
