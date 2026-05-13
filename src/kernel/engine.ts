@@ -296,6 +296,9 @@ export function createEngine(
     sellTower(towerId: string) {
       return dispatch({ kind: "sellTower", tower: towerId });
     },
+    overrideTargeting(towerId: string, strategy) {
+      return dispatch({ kind: "overrideTargeting", tower: towerId, strategy });
+    },
     snapshot() {
       assertAlive();
       return serializeWorld(world, tickIndex);

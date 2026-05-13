@@ -4,16 +4,20 @@ import {
   Phase,
   type ActionContext,
   type GameEvent,
+  type OverrideTargetingAction,
   type PlaceTowerAction,
   type PlacementValidationResult,
   type Plugin,
   type Position,
   type RewardContext,
   type SellTowerAction,
+  type TargetingStrategyConfig,
 } from "../../types.js";
 
 interface TowerArchetype {
   readonly cost: number;
+  readonly targeting?: TargetingStrategyConfig;
+  readonly strategy?: TargetingStrategyConfig;
   readonly attacks: ReadonlyArray<{
     readonly id: string;
     readonly stats: { readonly range: number; readonly cooldown: number; readonly damage: number };
@@ -47,6 +51,7 @@ export const towersPlugin: Plugin = {
     api.registerComponent({ name: "gold", writableIn: [Phase.Reward] });
     api.registerComponent({ name: "attacks", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "purchasedUpgrades", writableIn: PHASE_ORDER });
+    api.registerComponent({ name: "targeting", writableIn: PHASE_ORDER });
     // soldTowers tracks ids of sold towers so a second sellTower on the same id
     // reports TOWER_ALREADY_SOLD rather than the more generic UNKNOWN_TOWER.
     api.registerComponent({ name: "soldTowers", writableIn: PHASE_ORDER });
@@ -113,12 +118,15 @@ export const towersPlugin: Plugin = {
 
         // Validation complete — apply.
         const entityId = `tower:${a.tower}:${a.position.x},${a.position.y}`;
+        const initialTargeting: TargetingStrategyConfig =
+          towerDef.targeting ?? towerDef.strategy ?? { kind: "closest-to-base" };
         ctx.world.spawn(entityId, {
           tower: { archetype: a.tower },
           position: { x: a.position.x, y: a.position.y },
           cooldownTimer: { remaining: 0 },
           attacks: structuredClone(towerDef.attacks),
           purchasedUpgrades: [] as string[],
+          targeting: { ...initialTargeting },
         });
         const newGold = goldComp.amount - towerDef.cost;
         ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount: newGold }));
@@ -193,6 +201,50 @@ export const towersPlugin: Plugin = {
           refund,
         });
         return { ok: true, effect: { tower: a.tower, refund } };
+      },
+    });
+
+    // overrideTargeting handler — player-driven runtime change to a Tower's
+    // TargetingStrategy. Accepts a TargetingStrategyConfig or its `kind` string
+    // shorthand (ADR-0015).
+    api.registerActionHandler({
+      kind: "overrideTargeting",
+      handle(ctx, action) {
+        const a = action as OverrideTargetingAction;
+        const towerEntity = ctx.world.get(a.tower);
+        if (!towerEntity || !towerEntity.components.has("tower")) {
+          return actionFailure("UNKNOWN_TOWER", `Tower entity '${a.tower}' not found.`);
+        }
+        const config: TargetingStrategyConfig =
+          typeof a.strategy === "string" ? { kind: a.strategy } : a.strategy;
+        if (typeof config?.kind !== "string") {
+          return actionFailure(
+            "UNKNOWN_STRATEGY",
+            `Invalid TargetingStrategy config; expected { kind: string } or a string shorthand.`,
+          );
+        }
+        const strategyDef = ctx.targetingStrategies.get(config.kind);
+        if (!strategyDef) {
+          return actionFailure(
+            "UNKNOWN_STRATEGY",
+            `No TargetingStrategy registered for kind '${config.kind}'.`,
+          );
+        }
+        const validation = strategyDef.validate(config);
+        if (!validation.ok) {
+          return actionFailure(
+            "UNKNOWN_STRATEGY",
+            `TargetingStrategy '${config.kind}' rejected the config: ${validation.reason}.`,
+          );
+        }
+        ctx.world.mutate(a.tower, "targeting", () => ({ ...config }));
+        ctx.emit({
+          kind: "targetingOverridden",
+          tick: ctx.tickIndex,
+          tower: a.tower,
+          strategy: { ...config },
+        });
+        return { ok: true, effect: { tower: a.tower, strategy: { ...config } } };
       },
     });
 

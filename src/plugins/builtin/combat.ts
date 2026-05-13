@@ -80,7 +80,11 @@ export const combatPlugin: Plugin = {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
             continue;
           }
+          const entityTargeting = tower.components.get("targeting") as
+            | TargetingStrategyConfig
+            | undefined;
           const targetingConfig: TargetingStrategyConfig =
+            entityTargeting ??
             (towerDef.targeting as TargetingStrategyConfig | undefined) ??
             (towerDef.strategy as TargetingStrategyConfig | undefined) ??
             DEFAULT_TARGETING;
