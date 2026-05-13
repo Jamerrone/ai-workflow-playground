@@ -48,6 +48,5 @@ export interface DeserializedWorld {
 }
 
 export function deserializeWorld(serialised: string): DeserializedWorld {
-  const parsed = JSON.parse(serialised) as DeserializedWorld;
-  return parsed;
+  return JSON.parse(serialised) as DeserializedWorld;
 }
