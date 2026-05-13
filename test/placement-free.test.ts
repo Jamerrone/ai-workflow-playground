@@ -3,6 +3,12 @@ import { createEngine } from "../src/index.js";
 import type { ConfigRegistry } from "../src/index.js";
 import { builtInBundle } from "../src/plugins/builtin/index.js";
 
+function createFreeEngine(registry: ConfigRegistry = buildFreePlacementRegistry(), seed = 1) {
+  const engine = createEngine(registry, { plugins: builtInBundle, seed });
+  engine.loadScenario("free-scenario");
+  return engine;
+}
+
 function buildFreePlacementRegistry(): ConfigRegistry {
   return {
     components: {},
@@ -70,22 +76,14 @@ function buildFreePlacementRegistry(): ConfigRegistry {
 
 describe("free PlacementMode", () => {
   it("accepts placement on an empty land tile that is not on a Path and not in a BlockedRegion", () => {
-    const engine = createEngine(buildFreePlacementRegistry(), {
-      plugins: builtInBundle,
-      seed: 1,
-    });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine();
     const result = engine.placeTower("archer", { x: 0, y: 0 });
     engine.dispose();
     expect(result.ok).toBe(true);
   });
 
   it("rejects placement on a Path tile with INVALID_PLACEMENT", () => {
-    const engine = createEngine(buildFreePlacementRegistry(), {
-      plugins: builtInBundle,
-      seed: 1,
-    });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine();
     const result = engine.placeTower("archer", { x: 3, y: 1 });
     engine.dispose();
     expect(result.ok).toBe(false);
@@ -93,11 +91,7 @@ describe("free PlacementMode", () => {
   });
 
   it("rejects placement on a BlockedRegion tile with INVALID_PLACEMENT", () => {
-    const engine = createEngine(buildFreePlacementRegistry(), {
-      plugins: builtInBundle,
-      seed: 1,
-    });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine();
     const result = engine.placeTower("archer", { x: 2, y: 3 });
     engine.dispose();
     expect(result.ok).toBe(false);
@@ -105,11 +99,7 @@ describe("free PlacementMode", () => {
   });
 
   it("rejects placement on an already-occupied tile with SLOT_OCCUPIED", () => {
-    const engine = createEngine(buildFreePlacementRegistry(), {
-      plugins: builtInBundle,
-      seed: 1,
-    });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine();
     const first = engine.placeTower("archer", { x: 0, y: 0 });
     expect(first.ok).toBe(true);
     const second = engine.placeTower("archer", { x: 0, y: 0 });
@@ -125,8 +115,7 @@ describe("free PlacementMode", () => {
       { x: 1, y: 3, width: 3, height: 1, kind: "mountain" },
       { x: 1, y: 2, width: 1, height: 2, kind: "water" },
     ];
-    const engine = createEngine(reg, { plugins: builtInBundle, seed: 1 });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine(reg);
     // Every tile in the L is blocked.
     const lTiles = [
       { x: 1, y: 3 }, { x: 2, y: 3 }, { x: 3, y: 3 },
@@ -150,8 +139,7 @@ describe("free PlacementMode", () => {
       { x: 2, y: 3, width: 1, height: 1, kind: "pond" },
       { x: 4, y: 3, width: 1, height: 1, kind: "mountain" },
     ];
-    const engine = createEngine(reg, { plugins: builtInBundle, seed: 1 });
-    engine.loadScenario("free-scenario");
+    const engine = createFreeEngine(reg);
     const snap = JSON.parse(engine.snapshot()) as {
       entities: Array<{ id: string; components: Record<string, unknown> }>;
     };
@@ -167,8 +155,7 @@ describe("free PlacementMode", () => {
     const kinds = regions.map((r) => r.kind).sort();
     expect(kinds).toEqual(["mountain", "pond"]);
     // Both kinds block placement uniformly (engine ignores kind).
-    const engine2 = createEngine(reg, { plugins: builtInBundle, seed: 2 });
-    engine2.loadScenario("free-scenario");
+    const engine2 = createFreeEngine(reg, 2);
     const pondRes = engine2.placeTower("archer", { x: 2, y: 3 });
     const mountainRes = engine2.placeTower("archer", { x: 4, y: 3 });
     engine2.dispose();
@@ -215,8 +202,7 @@ describe("free PlacementMode", () => {
     expect(offSlot.ok).toBe(false);
 
     // Free scenario uses free-mode rules.
-    const freeEngine = createEngine(reg, { plugins: builtInBundle, seed: 1 });
-    freeEngine.loadScenario("free-scenario");
+    const freeEngine = createFreeEngine(reg);
     const onLand = freeEngine.placeTower("archer", { x: 0, y: 0 });
     const onPath = freeEngine.placeTower("archer", { x: 3, y: 1 });
     freeEngine.dispose();
