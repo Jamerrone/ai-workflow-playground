@@ -111,6 +111,7 @@ export interface ActionContext {
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
+  readonly attackSelectionStrategies: ReadonlyMap<string, AttackSelectionStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
 }
@@ -182,10 +183,67 @@ export type AttackEffectValidationResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: string };
 
+export interface DamagePreviewContext {
+  readonly world: import("./kernel/world.js").World;
+  readonly source: { readonly id: string; readonly position: Position };
+  readonly primaryTarget: { readonly id: string; readonly position: Position };
+  readonly attack: {
+    readonly id: string;
+    readonly stats: Readonly<Record<string, unknown>>;
+    readonly targetFilter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] };
+  };
+}
+
 export interface AttackEffectDef {
   readonly kind: string;
   validate(effect: unknown): AttackEffectValidationResult;
   apply(ctx: AttackEffectContext): void;
+  /**
+   * Optional: expected damage this effect would deal on a fire — consumed by the
+   * `highest-damage` AttackSelectionStrategy. Returns 0 (or nothing) for effects
+   * that don't deal damage (slow, target-count, projectile-count, etc.).
+   */
+  damagePreview?(
+    stats: Readonly<Record<string, unknown>>,
+    fireContext: DamagePreviewContext,
+  ): number;
+}
+
+export interface AttackSelectionStrategyConfig {
+  readonly kind: string;
+  readonly [extra: string]: unknown;
+}
+
+export interface AttackSelectionCandidate {
+  readonly id: string;
+  readonly stats: Readonly<Record<string, unknown>>;
+  readonly targetFilter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] };
+  readonly effects: ReadonlyArray<AttackEffectConfig>;
+}
+
+export interface AttackSelectionContext {
+  readonly source: { readonly id: string; readonly position: Position };
+  /**
+   * Pre-filtered Attacks for this attacker: off cooldown AND at least one
+   * targetable enemy within range. The strategy's only remaining job is to
+   * rank these and pick one.
+   */
+  readonly eligible: ReadonlyArray<AttackSelectionCandidate>;
+  readonly config: AttackSelectionStrategyConfig;
+  readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
+  readonly world: import("./kernel/world.js").World;
+  /** Looks up a representative in-range, filter-passing target for a given Attack. */
+  resolveTarget(attack: AttackSelectionCandidate): { id: string; position: Position } | undefined;
+}
+
+export type AttackSelectionStrategyValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface AttackSelectionStrategyDef {
+  readonly kind: string;
+  validate(config: unknown): AttackSelectionStrategyValidationResult;
+  select(ctx: AttackSelectionContext): AttackSelectionCandidate | undefined;
 }
 
 export type UpgradeOpValidationResult =
@@ -226,6 +284,7 @@ export interface SystemContext {
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
+  readonly attackSelectionStrategies: ReadonlyMap<string, AttackSelectionStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
 }
@@ -261,6 +320,7 @@ export interface RegistrationApi {
   registerAttackEffect(def: AttackEffectDef): void;
   registerReward(def: RewardKindDef): void;
   registerTargetingStrategy(def: TargetingStrategyDef): void;
+  registerAttackSelectionStrategy(def: AttackSelectionStrategyDef): void;
   registerUpgradeOp(def: UpgradeOpDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }

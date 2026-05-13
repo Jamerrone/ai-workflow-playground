@@ -9,6 +9,7 @@ import {
   type ActionHandlerDef,
   type ActionResult,
   type AttackEffectDef,
+  type AttackSelectionStrategyDef,
   type ComponentDef,
   type ConfigRegistry,
   type Engine,
@@ -37,6 +38,7 @@ interface Registries {
   attackEffects: Map<string, AttackEffectDef>;
   rewardsByEventKind: Map<string, RewardKindDef[]>;
   targetingStrategies: Map<string, TargetingStrategyDef>;
+  attackSelectionStrategies: Map<string, AttackSelectionStrategyDef>;
   upgradeOps: Map<string, UpgradeOpDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
 }
@@ -51,6 +53,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const attackEffects = new Map<string, AttackEffectDef>();
   const rewardsByEventKind = new Map<string, RewardKindDef[]>();
   const targetingStrategies = new Map<string, TargetingStrategyDef>();
+  const attackSelectionStrategies = new Map<string, AttackSelectionStrategyDef>();
   const upgradeOps = new Map<string, UpgradeOpDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
 
@@ -81,6 +84,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerTargetingStrategy(def) {
       targetingStrategies.set(def.kind, def);
     },
+    registerAttackSelectionStrategy(def) {
+      attackSelectionStrategies.set(def.kind, def);
+    },
     registerUpgradeOp(def) {
       upgradeOps.set(def.kind, def);
     },
@@ -97,6 +103,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     attackEffects,
     rewardsByEventKind,
     targetingStrategies,
+    attackSelectionStrategies,
     upgradeOps,
     scenarioLoadHooks,
   };
@@ -114,6 +121,7 @@ export function createEngine(
     attackEffects,
     rewardsByEventKind,
     targetingStrategies,
+    attackSelectionStrategies,
     upgradeOps,
     scenarioLoadHooks,
   } = loadPlugins(options.plugins);
@@ -173,6 +181,7 @@ export function createEngine(
     placementModes,
     attackEffects,
     targetingStrategies,
+    attackSelectionStrategies,
     upgradeOps,
     emit(event: GameEvent) {
       // Action-produced events fire synchronously, before dispatch returns (ADR-0016).
@@ -210,6 +219,7 @@ export function createEngine(
         placementModes,
         attackEffects,
         targetingStrategies,
+        attackSelectionStrategies,
         upgradeOps,
         emit(event: GameEvent) {
           pending.push(event);

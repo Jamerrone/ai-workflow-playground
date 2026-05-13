@@ -46,7 +46,7 @@ describe("upgrades: Loader validation", () => {
     (reg.upgrades as any)["bad-stat"] = {
       tower: "archer",
       cost: 1,
-      ops: [{ kind: "stat", attackId: "shot", field: "damage" }],
+      ops: [{ kind: "stat", attackId: "shot", effectId: "main", field: "amount" }],
     };
     const r = buildRegistry(reg as unknown as LoaderInput);
     expect(r.ok).toBe(false);
@@ -60,7 +60,7 @@ describe("upgrades: Loader validation", () => {
     (reg.upgrades as any)["bad-stat-noattack"] = {
       tower: "archer",
       cost: 1,
-      ops: [{ kind: "stat", field: "damage", delta: 1 }],
+      ops: [{ kind: "stat", field: "amount", delta: 1 }],
     };
     const r = buildRegistry(reg as unknown as LoaderInput);
     expect(r.ok).toBe(false);
@@ -89,13 +89,13 @@ describe("upgrades: Loader validation", () => {
       tower: "archer",
       cost: 1,
       prerequisites: ["cycleB"],
-      ops: [{ kind: "stat", attackId: "shot", field: "damage", delta: 1 }],
+      ops: [{ kind: "stat", attackId: "shot", effectId: "main", field: "amount", delta: 1 }],
     };
     (reg.upgrades as any).cycleB = {
       tower: "archer",
       cost: 1,
       prerequisites: ["cycleA"],
-      ops: [{ kind: "stat", attackId: "shot", field: "damage", delta: 1 }],
+      ops: [{ kind: "stat", attackId: "shot", effectId: "main", field: "amount", delta: 1 }],
     };
     const r = buildRegistry(reg as unknown as LoaderInput);
     expect(r.ok).toBe(false);
@@ -145,7 +145,7 @@ describe("upgrades: purchaseUpgrade action", () => {
     }
   });
 
-  it("success: 'stat' op delta updates the tower's attack damage observable via world.query", () => {
+  it("success: 'stat' op delta updates the targeted effect's amount observable via world.query", () => {
     const reg = buildUpgradesRegistry();
     const engine = createTestEngine(reg);
     engine.loadScenario("upgradesScenario");
@@ -160,8 +160,11 @@ describe("upgrades: purchaseUpgrade action", () => {
     expect(r.ok).toBe(true);
     const comps = getTowerEntityState(snap, towerId);
     expect(comps).toBeDefined();
-    const attacks = comps!.attacks as Array<{ stats: { damage: number } }>;
-    expect(attacks[0]!.stats.damage).toBe(5 + 10);
+    const attacks = comps!.attacks as Array<{
+      effects: Array<{ id: string; stats: { amount: number } }>;
+    }>;
+    const main = attacks[0]!.effects.find((e) => e.id === "main")!;
+    expect(main.stats.amount).toBe(5 + 10);
   });
 
   it("success: 'stat' op with effectId updates the scoped effect's stat", () => {
@@ -190,15 +193,18 @@ describe("upgrades: purchaseUpgrade action", () => {
     const placed = engine.placeTower("archer", { x: 4, y: 0 });
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
-    // damage-boost (+10 delta) → damage=15. needs-boost (factor 2) → damage=30.
+    // damage-boost (+10 delta) → effect.main.amount=15. needs-boost (factor 2) → 30.
     expect(engine.purchaseUpgrade(towerId, "damage-boost").ok).toBe(true);
     expect(engine.purchaseUpgrade(towerId, "needs-boost").ok).toBe(true);
 
     const snap = engine.snapshot();
     engine.dispose();
     const comps = getTowerEntityState(snap, towerId)!;
-    const attacks = comps.attacks as Array<{ stats: { damage: number } }>;
-    expect(attacks[0]!.stats.damage).toBe(30);
+    const attacks = comps.attacks as Array<{
+      effects: Array<{ id: string; stats: { amount: number } }>;
+    }>;
+    const main = attacks[0]!.effects.find((e) => e.id === "main")!;
+    expect(main.stats.amount).toBe(30);
   });
 
   it("success: 'attackMutation' op replaces a named field on the targeted attack", () => {
@@ -359,7 +365,7 @@ describe("upgrades: failure codes", () => {
       tower: "archer",
       cost: 5,
       exclusiveGroup: "other",
-      ops: [{ kind: "stat", attackId: "shot", field: "damage", delta: 1 }],
+      ops: [{ kind: "stat", attackId: "shot", effectId: "main", field: "amount", delta: 1 }],
     };
     (reg.towers as any).archer.upgradeTree.push("other-branch-a");
     const engine = createTestEngine(reg);

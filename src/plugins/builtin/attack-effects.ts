@@ -112,6 +112,9 @@ const damageEffect: AttackEffectDef = {
       });
     }
   },
+  damagePreview(stats) {
+    return (stats as { amount?: number }).amount ?? 0;
+  },
 };
 
 /** Splash: damages every enemy within stats.radius of the primary target's frozen position. */
@@ -141,6 +144,17 @@ const splashEffect: AttackEffectDef = {
       effectId: ctx.effect.id,
       targets: hit,
     });
+  },
+  damagePreview(stats, fireContext) {
+    const { radius, amount } = stats as { radius?: number; amount?: number };
+    if (typeof radius !== "number" || typeof amount !== "number") return 0;
+    const impact = fireContext.primaryTarget.position;
+    let count = 0;
+    for (const e of fireContext.world.query({ all: ["enemy", "position", "health"] })) {
+      const pos = e.components.get("position") as Position;
+      if (dist(pos, impact) <= radius) count++;
+    }
+    return amount * count;
   },
 };
 
@@ -184,6 +198,22 @@ const slowEffect: AttackEffectDef = {
 const dotEffect: AttackEffectDef = {
   kind: "dot",
   validate: (effect) => validateNumberStats(effect, ["damagePerTick", "interval", "duration"]),
+  damagePreview(stats) {
+    const { damagePerTick, interval, duration } = stats as {
+      damagePerTick?: number;
+      interval?: number;
+      duration?: number;
+    };
+    if (
+      typeof damagePerTick !== "number" ||
+      typeof interval !== "number" ||
+      typeof duration !== "number" ||
+      interval <= 0
+    ) {
+      return 0;
+    }
+    return damagePerTick * Math.ceil(duration / interval);
+  },
   apply(ctx: AttackEffectContext): void {
     const { damagePerTick, interval, duration } = ctx.effect.stats as {
       damagePerTick: number;
@@ -215,32 +245,20 @@ const dotEffect: AttackEffectDef = {
   },
 };
 
-/** Pierce: damages up to stats.maxTargets nearest enemies on the source→primary axis. */
-const pierceEffect: AttackEffectDef = {
-  kind: "pierce",
-  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
-  apply: (ctx) => pierceLike(ctx, "pierceApplied"),
-};
-
-/** Line-pierce: long-line variant — same handler with the variant kind in events. */
-const linePierceEffect: AttackEffectDef = {
-  kind: "line-pierce",
-  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
-  apply: (ctx) => pierceLike(ctx, "linePierceApplied"),
-};
-
-function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
-  const { amount, maxTargets } = ctx.effect.stats as { amount: number; maxTargets: number };
-  const src = ctx.fire.source.position;
-  const primary = ctx.fire.primaryTarget.position;
+function pierceReachable(
+  world: AttackEffectContext["world"],
+  src: Position,
+  primary: Position,
+  maxTargets: number,
+): Array<{ id: string; pos: Position }> {
   const dx = primary.x - src.x;
   const dy = primary.y - src.y;
   let axis: "x" | "y" | "diag";
   if (dx !== 0 && dy === 0) axis = "x";
   else if (dx === 0 && dy !== 0) axis = "y";
   else axis = "diag";
-  const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
-  const candidates = enemies
+  const enemies = world.query({ all: ["enemy", "position", "health"] });
+  return enemies
     .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
     .filter(({ pos }) => {
       if (axis === "x") return pos.y === src.y && Math.sign(pos.x - src.x) === Math.sign(dx);
@@ -249,6 +267,52 @@ function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
     })
     .sort((a, b) => dist(a.pos, src) - dist(b.pos, src))
     .slice(0, maxTargets);
+}
+
+/** Pierce: damages up to stats.maxTargets nearest enemies on the source→primary axis. */
+const pierceEffect: AttackEffectDef = {
+  kind: "pierce",
+  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
+  apply: (ctx) => pierceLike(ctx, "pierceApplied"),
+  damagePreview(stats, fireContext) {
+    const { amount, maxTargets } = stats as { amount?: number; maxTargets?: number };
+    if (typeof amount !== "number" || typeof maxTargets !== "number") return 0;
+    const reachable = pierceReachable(
+      fireContext.world,
+      fireContext.source.position,
+      fireContext.primaryTarget.position,
+      maxTargets,
+    );
+    return amount * reachable.length;
+  },
+};
+
+/** Line-pierce: long-line variant — same handler with the variant kind in events. */
+const linePierceEffect: AttackEffectDef = {
+  kind: "line-pierce",
+  validate: (effect) => validateNumberStats(effect, ["amount", "maxTargets"]),
+  apply: (ctx) => pierceLike(ctx, "linePierceApplied"),
+  damagePreview(stats, fireContext) {
+    const { amount, maxTargets } = stats as { amount?: number; maxTargets?: number };
+    if (typeof amount !== "number" || typeof maxTargets !== "number") return 0;
+    const reachable = pierceReachable(
+      fireContext.world,
+      fireContext.source.position,
+      fireContext.primaryTarget.position,
+      maxTargets,
+    );
+    return amount * reachable.length;
+  },
+};
+
+function pierceLike(ctx: AttackEffectContext, eventKind: string): void {
+  const { amount, maxTargets } = ctx.effect.stats as { amount: number; maxTargets: number };
+  const candidates = pierceReachable(
+    ctx.world,
+    ctx.fire.source.position,
+    ctx.fire.primaryTarget.position,
+    maxTargets,
+  );
   const hit: string[] = [];
   for (const c of candidates) {
     applyDamage(ctx, c.id, amount);
@@ -298,6 +362,25 @@ const bounceEffect: AttackEffectDef = {
       effectId: ctx.effect.id,
       chain,
     });
+  },
+  damagePreview(stats, fireContext) {
+    const { amount, hops } = stats as { amount?: number; hops?: number };
+    if (typeof amount !== "number" || typeof hops !== "number") return 0;
+    const enemies = fireContext.world.query({ all: ["enemy", "position", "health"] });
+    const struck = new Set<string>([fireContext.primaryTarget.id]);
+    let from: Position = fireContext.primaryTarget.position;
+    let reachableHops = 0;
+    for (let i = 0; i < hops; i++) {
+      const next = enemies
+        .filter((e) => !struck.has(e.id))
+        .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
+        .sort((a, b) => dist(a.pos, from) - dist(b.pos, from))[0];
+      if (!next) break;
+      struck.add(next.id);
+      from = next.pos;
+      reachableHops++;
+    }
+    return amount * (1 + reachableHops);
   },
 };
 

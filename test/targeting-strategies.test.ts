@@ -33,7 +33,7 @@ function multiEnemyRegistry(): ConfigRegistry {
   };
   // Archer with long range so every enemy is in range.
   (reg.towers as any).archer.attacks[0].stats.range = 10;
-  (reg.towers as any).archer.attacks[0].stats.damage = 1; // never one-shot
+  // never one-shot
   (reg.towers as any).archer.attacks[0].effects = [{ kind: "damage", stats: { amount: 1 } }];
   // Stop enemies before they reach the base so the tower has time to fire.
   (reg.enemies as any).grunt.stats.speed = 0;

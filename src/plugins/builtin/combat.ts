@@ -1,5 +1,8 @@
 import {
   Phase,
+  type AttackEffectConfig,
+  type AttackSelectionCandidate,
+  type AttackSelectionStrategyConfig,
   type Plugin,
   type Position,
   type TargetingCandidate,
@@ -10,6 +13,7 @@ const TOWERS_STATE_ENTITY = "towers/state";
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
 const FIRES_COMPONENT = "pendingFires";
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
+const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = { kind: "declaration-order" };
 
 interface PendingFire {
   source: { id: string; position: Position };
@@ -85,13 +89,16 @@ export const combatPlugin: Plugin = {
             (towerDef.strategy as TargetingStrategyConfig | undefined) ??
             DEFAULT_TARGETING;
           const strategy = ctx.targetingStrategies.get(targetingConfig.kind);
-          // Pick the highest-damage attack with at least one eligible in-range target.
-          const sortedAttacks = [...attacks].sort(
-            (a, b) => (b.stats.damage ?? 0) - (a.stats.damage ?? 0),
-          );
-          let firedAttack: any = null;
-          let firedTarget: TargetingCandidate | undefined;
-          for (const attack of sortedAttacks) {
+          const selectionConfig: AttackSelectionStrategyConfig =
+            (towerDef.attackSelection as AttackSelectionStrategyConfig | undefined) ??
+            DEFAULT_ATTACK_SELECTION;
+          const selection = ctx.attackSelectionStrategies.get(selectionConfig.kind);
+
+          // For each Attack, pre-compute (eligible enemies, target picked by TargetingStrategy).
+          // An Attack is "eligible" for selection if its TargetingStrategy returned a target.
+          const perAttackTargets = new Map<string, TargetingCandidate>();
+          const eligibleAttacks: AttackSelectionCandidate[] = [];
+          for (const attack of attacks) {
             const eligible = enemies.filter((e) => {
               const ep = e.components.get("position") as Position;
               if (dist(ep, towerPos) > attack.stats.range) return false;
@@ -108,9 +115,35 @@ export const combatPlugin: Plugin = {
                 })
               : undefined;
             if (!picked) continue;
-            firedAttack = attack;
-            firedTarget = picked;
-            break;
+            perAttackTargets.set(attack.id, picked);
+            eligibleAttacks.push({
+              id: attack.id,
+              stats: attack.stats,
+              ...(attack.targetFilter !== undefined ? { targetFilter: attack.targetFilter } : {}),
+              effects: (attack.effects as ReadonlyArray<AttackEffectConfig> | undefined) ?? [],
+            });
+          }
+
+          let firedAttack: any = null;
+          let firedTarget: TargetingCandidate | undefined;
+          if (eligibleAttacks.length > 0 && selection) {
+            const picked = selection.select({
+              source: { id: tower.id, position: { ...towerPos } },
+              eligible: eligibleAttacks,
+              config: selectionConfig,
+              attackEffects: ctx.attackEffects,
+              world: ctx.world,
+              resolveTarget(a) {
+                const tgt = perAttackTargets.get(a.id);
+                if (!tgt) return undefined;
+                const tp = tgt.components.get("position") as Position;
+                return { id: tgt.id, position: { ...tp } };
+              },
+            });
+            if (picked) {
+              firedAttack = attacks.find((a) => a.id === picked.id);
+              firedTarget = perAttackTargets.get(picked.id);
+            }
           }
           if (!firedAttack || !firedTarget) {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));

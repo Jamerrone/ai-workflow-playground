@@ -44,6 +44,13 @@ export interface LoaderOptions {
   readonly strict?: boolean;
   readonly pluginManifest?: readonly PluginManifestEntry[];
   readonly knownKindHints?: ReadonlyMap<string, string>;
+  /**
+   * AttackEffect kinds whose registered AttackEffectDef provides a `damagePreview`.
+   * Supplements the Loader's built-in set. When a Tower configures
+   * `attackSelection: { kind: "highest-damage" }`, the Loader emits a warning for
+   * every Attack effect whose kind is not in the combined set.
+   */
+  readonly damagePreviewKinds?: ReadonlySet<string>;
 }
 
 export const BUCKETS = [

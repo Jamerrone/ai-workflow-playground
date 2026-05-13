@@ -5,6 +5,18 @@ import { BUCKETS } from "./types.js";
 // Field-name suffixes forbidden by ADR-0004 (canonical-units doctrine).
 const FORBIDDEN_SUFFIXES = ["Ms", "Sec", "PerSec", "Tiles", "Pixels", "WorldUnits"] as const;
 
+// AttackEffect kinds that the built-in attack-effects plugin ships with a `damagePreview`.
+// Used by validateTower to warn when a Tower opts into `highest-damage` attack selection
+// while mounting effects whose registered AttackEffectDef lacks the damagePreview hook.
+const BUILTIN_DAMAGE_PREVIEW_KINDS: ReadonlySet<string> = new Set([
+  "damage",
+  "splash",
+  "pierce",
+  "line-pierce",
+  "bounce",
+  "dot",
+]);
+
 // `kind` values known to the built-in plugin bundle at the time of this slice. Future
 // slices add to this list (and Plugin authors contribute their own via knownKindHints).
 const BUILTIN_KINDS = new Map<string, ReadonlySet<string>>([
@@ -12,6 +24,7 @@ const BUILTIN_KINDS = new Map<string, ReadonlySet<string>>([
   ["waveTrigger", new Set(["manual", "auto", "hybrid"])],
   ["targeting", new Set(["closest-to-base", "lowest-hp", "highest-hp", "tag-priority"])],
   ["strategy", new Set(["closest-to-base", "lowest-hp", "highest-hp", "tag-priority"])],
+  ["attackSelection", new Set(["declaration-order", "highest-damage"])],
   ["attackEffect", new Set(["damage", "splash", "slow", "dot", "pierce", "bounce", "line-pierce", "minimum-range", "target-count", "projectile-count", "heal"])],
   ["upgradeOp", new Set(["stat", "attackMutation", "guardModifier"])],
   ["mapFeature", new Set(["blocked-region"])],
@@ -173,12 +186,19 @@ function validateTower(ctx: ValidationContext, id: string, raw: Record<string, u
   const path = `towers.${id}`;
   requireNumber(ctx, raw, "cost", path);
   requireArray(ctx, raw, "attacks", path);
+  const isHighestDamage =
+    isObject(raw.attackSelection) && raw.attackSelection.kind === "highest-damage";
+  const damagePreviewKinds = new Set<string>([
+    ...BUILTIN_DAMAGE_PREVIEW_KINDS,
+    ...(ctx.options.damagePreviewKinds ?? []),
+  ]);
   if (Array.isArray(raw.attacks)) {
     const seenIds = new Set<string>();
     raw.attacks.forEach((atk, i) => {
       if (!isObject(atk)) return;
       const atkPath = `${path}.attacks[${i}]`;
-      if (typeof atk.id !== "string") {
+      const atkId = typeof atk.id === "string" ? atk.id : undefined;
+      if (atkId === undefined) {
         ctx.errors.push({
           severity: "error",
           code: "INVALID_FIELD",
@@ -187,15 +207,15 @@ function validateTower(ctx: ValidationContext, id: string, raw: Record<string, u
           expected: "string",
           actual: typeof atk.id,
         });
-      } else if (seenIds.has(atk.id)) {
+      } else if (seenIds.has(atkId)) {
         ctx.errors.push({
           severity: "error",
           code: "INVALID_FIELD",
           path: `${atkPath}.id`,
-          message: `Duplicate Attack id '${atk.id}' on tower '${id}'.`,
+          message: `Duplicate Attack id '${atkId}' on tower '${id}'.`,
         });
       } else {
-        seenIds.add(atk.id);
+        seenIds.add(atkId);
       }
       if (Array.isArray(atk.effects)) {
         atk.effects.forEach((eff, j) => {
@@ -203,12 +223,26 @@ function validateTower(ctx: ValidationContext, id: string, raw: Record<string, u
           const effPath = `${atkPath}.effects[${j}]`;
           checkKind(ctx, "attackEffect", eff, effPath);
           validateAttackEffectFields(ctx, eff, effPath);
+          if (isHighestDamage && typeof eff.kind === "string" && !damagePreviewKinds.has(eff.kind)) {
+            ctx.warnings.push({
+              severity: "warning",
+              code: "DAMAGE_PREVIEW_MISSING",
+              path: `${effPath}.kind`,
+              message: `Tower '${id}' uses attackSelection 'highest-damage' but Attack '${atkId ?? `[${i}]`}' mounts an effect of kind '${eff.kind}' whose AttackEffectDef does not implement 'damagePreview'.`,
+              expected: "effect kind with a registered damagePreview",
+              actual: eff.kind,
+              hint: "Either implement damagePreview on the registering plugin, switch to 'declaration-order' attack selection, or remove the effect.",
+            });
+          }
         });
       }
     });
   }
   if (raw.targeting !== undefined && isObject(raw.targeting)) {
     checkKind(ctx, "targeting", raw.targeting, `${path}.targeting`);
+  }
+  if (raw.attackSelection !== undefined && isObject(raw.attackSelection)) {
+    checkKind(ctx, "attackSelection", raw.attackSelection, `${path}.attackSelection`);
   }
 }
 

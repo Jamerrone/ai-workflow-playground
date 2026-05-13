@@ -30,7 +30,7 @@ describe("Loader: error codes", () => {
           attacks: [
             {
               id: "shot",
-              stats: { damage: 10, range: 3, cooldownMs: 500 },
+              stats: { range: 3, cooldownMs: 500 },
               effects: [{ kind: "damage" }],
             },
           ],
@@ -235,7 +235,7 @@ describe("Loader: error codes", () => {
           extends: "enemies:base",
           cost: 50,
           attacks: [
-            { id: "shot", stats: { damage: 1, range: 3, cooldown: 0.5 }, effects: [{ kind: "damage" }] },
+            { id: "shot", stats: { range: 3, cooldown: 0.5 }, effects: [{ kind: "damage" }] },
           ],
         },
       },
@@ -366,13 +366,13 @@ describe("Loader: template inheritance", () => {
           abstract: true,
           cost: 50,
           attacks: [
-            { id: "shot", stats: { damage: 5, range: 3, cooldown: 1 }, effects: [{ kind: "damage", stats: { amount: 5 } }] },
+            { id: "shot", stats: { range: 3, cooldown: 1 }, effects: [{ kind: "damage", stats: { amount: 5 } }] },
           ],
         },
         archer: {
           extends: "base",
           attacks: [
-            { id: "shot", stats: { damage: 10 } },
+            { id: "shot", stats: { cooldown: 0.5 } },
           ],
         },
       },
@@ -380,9 +380,9 @@ describe("Loader: template inheritance", () => {
     const r = buildRegistry(input);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      const archer = r.registry.towers.archer as { attacks: Array<{ id: string; stats: { damage: number; range: number } }> };
+      const archer = r.registry.towers.archer as { attacks: Array<{ id: string; stats: { cooldown: number; range: number } }> };
       expect(archer.attacks).toHaveLength(1);
-      expect(archer.attacks[0]!.stats.damage).toBe(10);
+      expect(archer.attacks[0]!.stats.cooldown).toBe(0.5);
       expect(archer.attacks[0]!.stats.range).toBe(3);
     }
   });

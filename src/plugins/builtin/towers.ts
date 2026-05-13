@@ -16,7 +16,7 @@ interface TowerArchetype {
   readonly cost: number;
   readonly attacks: ReadonlyArray<{
     readonly id: string;
-    readonly stats: { readonly range: number; readonly cooldown: number; readonly damage: number };
+    readonly stats: { readonly range: number; readonly cooldown: number };
     readonly effects: ReadonlyArray<{ readonly kind: string; readonly stats?: { readonly amount?: number } }>;
   }>;
 }
