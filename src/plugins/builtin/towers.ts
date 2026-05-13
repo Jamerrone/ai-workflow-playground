@@ -47,6 +47,9 @@ export const towersPlugin: Plugin = {
     api.registerComponent({ name: "gold", writableIn: [Phase.Reward] });
     api.registerComponent({ name: "attacks", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "purchasedUpgrades", writableIn: PHASE_ORDER });
+    // soldTowers tracks ids of sold towers so a second sellTower on the same id
+    // reports TOWER_ALREADY_SOLD rather than the more generic UNKNOWN_TOWER.
+    api.registerComponent({ name: "soldTowers", writableIn: PHASE_ORDER });
 
     // Built-in PlacementMode: fixed. Placement is legal only on a pre-declared TowerSlot.
     api.registerPlacementMode({
@@ -60,10 +63,8 @@ export const towersPlugin: Plugin = {
       },
     });
 
-    // Scenario state: gold (initial value from startingGold GameRule override) and
-    // the set of sold tower ids (so a second sellTower on the same id reports
-    // TOWER_ALREADY_SOLD rather than the more generic UNKNOWN_TOWER).
-    api.registerComponent({ name: "soldTowers", writableIn: PHASE_ORDER });
+    // Scenario state: gold (initial value from startingGold GameRule override)
+    // and the set of sold tower ids.
     api.onScenarioLoad((ctx: ActionContext) => {
       const scenario = (ctx.registry.scenarios as Record<string, { gameRuleOverrides?: { startingGold?: number } }>)[ctx.scenarioId];
       const startingGold = scenario?.gameRuleOverrides?.startingGold ?? 0;
@@ -101,7 +102,7 @@ export const towersPlugin: Plugin = {
           return actionFailure("INVALID_POSITION", valid.reason ?? "Invalid placement position.");
         }
 
-        const goldEntity = ctx.world.get("towers/state");
+        const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
         const goldComp = goldEntity?.components.get("gold") as { amount: number } | undefined;
         if (!goldComp || goldComp.amount < towerDef.cost) {
           return actionFailure("INSUFFICIENT_GOLD", "Not enough gold to place tower.");
@@ -117,7 +118,7 @@ export const towersPlugin: Plugin = {
           purchasedUpgrades: [] as string[],
         });
         const newGold = goldComp.amount - towerDef.cost;
-        ctx.world.mutate("towers/state", "gold", () => ({ amount: newGold }));
+        ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount: newGold }));
         ctx.emit({
           kind: "towerPlaced",
           tick: ctx.tickIndex,
@@ -178,10 +179,8 @@ export const towersPlugin: Plugin = {
         // Validation complete — apply.
         const position = towerEntity.components.get("position") as Position | undefined;
         ctx.world.destroy(a.tower);
-        ctx.world.mutate(TOWERS_STATE_ENTITY, "soldTowers", (v) => {
-          const cur = (v as { ids: string[] } | undefined) ?? { ids: [] };
-          return { ids: [...cur.ids, a.tower] };
-        });
+        const newSoldIds = [...(soldComp?.ids ?? []), a.tower];
+        ctx.world.mutate(TOWERS_STATE_ENTITY, "soldTowers", () => ({ ids: newSoldIds }));
         ctx.emit({
           kind: "towerSold",
           tick: ctx.tickIndex,
