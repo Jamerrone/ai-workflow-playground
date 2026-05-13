@@ -346,7 +346,7 @@ export function createEngine(
         tickIndex,
         seed: options.seed,
         ticks: [...tickHistory],
-        actions: actionHistory.map(([t, a]) => [t, a] as [number, PlayerAction]),
+        actions: [...actionHistory],
       };
     },
     loadState(bundle: SavedState): void {
