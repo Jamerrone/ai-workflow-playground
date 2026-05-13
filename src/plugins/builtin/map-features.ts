@@ -24,13 +24,14 @@ interface MapData {
   readonly blockedRegions?: ReadonlyArray<BlockedRegion>;
 }
 
+const BLOCKED_REGION_NUMERIC_FIELDS = ["x", "y", "width", "height"] as const;
+
 function inRegion(p: Position, r: BlockedRegion): boolean {
   return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
 }
 
-// A point lies on a Path iff it lies on the segment between two consecutive
-// (axis-aligned) waypoints. Includes both endpoints — bases and spawn tiles
-// are part of their Path and therefore unbuildable.
+// Endpoints are inclusive — bases and spawn tiles count as on-Path and are
+// therefore unbuildable.
 function onPath(p: Position, paths: ReadonlyArray<MapPath>): boolean {
   for (const path of paths) {
     const wps = path.waypoints;
@@ -54,14 +55,10 @@ function onPath(p: Position, paths: ReadonlyArray<MapPath>): boolean {
 export const mapFeaturesPlugin: Plugin = {
   id: "map-features",
   register(api) {
-    // BlockedRegion entities are spawned at scenario load; the component carries the
-    // authored `kind` string verbatim so renderers can decorate (US 14). The engine
-    // itself only consults x/y/width/height — `kind` is never branched on.
+    // The component carries the authored `kind` string verbatim so renderers can
+    // decorate; the engine itself only consults x/y/width/height.
     api.registerComponent({ name: "blockedRegion", writableIn: PHASE_ORDER });
 
-    // MapFeature registry entry for `blocked-region`. The inner `kind` field on each
-    // BlockedRegion instance is a renderer hint (pond, mountain, water, …) and may
-    // be any string.
     api.registerMapFeature({
       kind: "blocked-region",
       validate(feature: unknown): MapFeatureValidationResult {
@@ -69,12 +66,13 @@ export const mapFeaturesPlugin: Plugin = {
           return { ok: false, reason: "BlockedRegion must be an object." };
         }
         const f = feature as Record<string, unknown>;
-        for (const numField of ["x", "y", "width", "height"]) {
+        for (const numField of BLOCKED_REGION_NUMERIC_FIELDS) {
           if (typeof f[numField] !== "number") {
             return { ok: false, reason: `BlockedRegion missing numeric '${numField}'.` };
           }
         }
-        // `kind` is renderer-facing; absent is fine, but if present must be a string.
+        // `kind` is a renderer hint (pond, mountain, water, …); absent is fine,
+        // but if present must be a string.
         if (f.kind !== undefined && typeof f.kind !== "string") {
           return { ok: false, reason: `BlockedRegion 'kind' must be a string when present.` };
         }
@@ -82,8 +80,6 @@ export const mapFeaturesPlugin: Plugin = {
       },
     });
 
-    // `free` PlacementMode. Accepts any tile that is (a) not on a Path,
-    // (b) not inside any BlockedRegion entity, (c) not already occupied by another Tower.
     api.registerPlacementMode({
       kind: "free",
       validate(position, map, world): PlacementValidationResult {
@@ -121,8 +117,9 @@ export const mapFeaturesPlugin: Plugin = {
       },
     });
 
-    // Spawn one entity per BlockedRegion at scenario load so renderers can query them
-    // via world.query and so the `free` validator can consult a live data source.
+    // Spawn one entity per BlockedRegion at scenario load so renderers can
+    // discover them via world.query and the `free` validator above can consult
+    // a live data source rather than re-reading the map config each placement.
     api.onScenarioLoad((ctx: ActionContext) => {
       const scenario = (ctx.registry.scenarios as Record<string, { map: string }>)[
         ctx.scenarioId
