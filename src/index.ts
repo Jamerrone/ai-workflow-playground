@@ -24,4 +24,8 @@ export type {
   PlayerAction,
   ActionResult,
   Position,
+  SavedState,
+  SaveOptions,
+  SnapshotBundle,
+  TranscriptBundle,
 } from "./types.js";
