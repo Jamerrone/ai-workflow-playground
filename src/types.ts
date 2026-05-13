@@ -82,11 +82,19 @@ export interface SellTowerAction extends PlayerActionBase {
   readonly tower: string;
 }
 
+export interface OverrideTargetingAction extends PlayerActionBase {
+  readonly kind: "overrideTargeting";
+  readonly tower: string;
+  /** Accepts either a TargetingStrategyConfig or its `kind` as a string shorthand (ADR-0015). */
+  readonly strategy: string | TargetingStrategyConfig;
+}
+
 export type PlayerAction =
   | PlaceTowerAction
   | SendNextWaveAction
   | PurchaseUpgradeAction
   | SellTowerAction
+  | OverrideTargetingAction
   | PlayerActionBase;
 
 export interface PlacementValidationResult {
@@ -286,5 +294,9 @@ export interface Engine {
   sendNextWave(): ActionResult;
   purchaseUpgrade(towerId: string, upgradeId: string): ActionResult;
   sellTower(towerId: string): ActionResult;
+  overrideTargeting(
+    towerId: string,
+    strategy: string | TargetingStrategyConfig,
+  ): ActionResult;
   snapshot(): string;
 }
