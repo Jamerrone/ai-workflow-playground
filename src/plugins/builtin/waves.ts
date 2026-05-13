@@ -53,34 +53,38 @@ interface WaveData {
   readonly reward?: number;
 }
 
+interface EnemyDef {
+  readonly tags?: ReadonlyArray<string>;
+  readonly stats: {
+    readonly hp: number;
+    readonly speed: number;
+    readonly baseDamage: number;
+  };
+  readonly killReward: number;
+}
+
 function resolveGroupPaths(
   scenario: ScenarioData,
   waveRef: ScenarioWaveRef,
   groupId: string,
   mapPaths: ReadonlyArray<MapPath>,
 ): MapPath[] {
-  const fallback = (): MapPath[] => {
-    if (typeof scenario.defaultPath === "string") {
-      const p = mapPaths.find((p) => p.id === scenario.defaultPath);
-      return p ? [p] : [];
-    }
-    return [];
+  const findById = (id: string): MapPath[] => {
+    const p = mapPaths.find((mp) => mp.id === id);
+    return p ? [p] : [];
   };
+  const fromRef = (ref: string): MapPath[] =>
+    ref === "*" ? [...mapPaths] : findById(ref);
+  const fallback = (): MapPath[] =>
+    typeof scenario.defaultPath === "string" ? findById(scenario.defaultPath) : [];
+
   const bindings = waveRef.pathBindings;
   if (bindings === undefined) return fallback();
-  if (typeof bindings === "string") {
-    if (bindings === "*") return [...mapPaths];
-    const p = mapPaths.find((p) => p.id === bindings);
-    return p ? [p] : [];
-  }
+  if (typeof bindings === "string") return fromRef(bindings);
   if (typeof bindings === "object" && bindings !== null) {
     const value = (bindings as Record<string, unknown>)[groupId];
     if (value === undefined) return fallback();
-    if (typeof value === "string") {
-      if (value === "*") return [...mapPaths];
-      const p = mapPaths.find((p) => p.id === value);
-      return p ? [p] : [];
-    }
+    if (typeof value === "string") return fromRef(value);
   }
   return fallback();
 }
@@ -176,11 +180,7 @@ export const wavesPlugin: Plugin = {
             const pathIndex = Math.floor(i / shouldHavePerPath);
             const indexOnPath = i % shouldHavePerPath;
             const path = paths[pathIndex]!;
-            const enemyDef = (ctx.registry.enemies as Record<string, {
-              tags?: string[];
-              stats: { hp: number; speed: number; baseDamage: number };
-              killReward: number;
-            }>)[group.enemy]!;
+            const enemyDef = (ctx.registry.enemies as Record<string, EnemyDef>)[group.enemy]!;
             const spawnAt = path.waypoints[0]!;
             const enemyId = `enemy:${group.id}:${path.id}:${indexOnPath}:w${ws.nextIndex}:${ctx.tickIndex}`;
             ctx.world.spawn(enemyId, {

@@ -64,28 +64,21 @@ function checkScenarioRefs(
           }
         }
         const defaultPath = typeof s.defaultPath === "string" ? s.defaultPath : null;
+        const fromRef = (ref: string): string[] => (ref === "*" ? [...allPaths] : [ref]);
+        const fallback = (): string[] => (defaultPath === null ? [] : [defaultPath]);
 
-        const resolveBoundPaths = (gid: string): { ok: true; paths: string[] } | { ok: false } => {
+        // Resolve a group's bound paths to a list of path ids. An empty list means
+        // the binding is missing or malformed and produces a MISSING_BINDING error.
+        const resolveBoundPaths = (gid: string): string[] => {
           const bindings = entry.pathBindings;
-          if (bindings === undefined) {
-            if (defaultPath === null) return { ok: false };
-            return { ok: true, paths: [defaultPath] };
-          }
-          if (typeof bindings === "string") {
-            if (bindings === "*") return { ok: true, paths: [...allPaths] };
-            return { ok: true, paths: [bindings] };
-          }
+          if (bindings === undefined) return fallback();
+          if (typeof bindings === "string") return fromRef(bindings);
           if (isObject(bindings)) {
             const value = (bindings as Record<string, unknown>)[gid];
-            if (value === undefined) {
-              if (defaultPath === null) return { ok: false };
-              return { ok: true, paths: [defaultPath] };
-            }
-            if (typeof value !== "string") return { ok: false };
-            if (value === "*") return { ok: true, paths: [...allPaths] };
-            return { ok: true, paths: [value] };
+            if (value === undefined) return fallback();
+            if (typeof value === "string") return fromRef(value);
           }
-          return { ok: false };
+          return [];
         };
 
         // 1. Per-group object bindings: every key must reference an existing group.
@@ -107,9 +100,9 @@ function checkScenarioRefs(
         //    and each bound Path must exist on the Map; the bound Enemy must carry the
         //    Path's kind as a tag.
         for (const [gid, enemyId] of groupIdToEnemy) {
-          const resolved = resolveBoundPaths(gid);
+          const resolvedPaths = resolveBoundPaths(gid);
           const bp = `${base}.waves[${i}].pathBindings.${gid}`;
-          if (!resolved.ok || resolved.paths.length === 0) {
+          if (resolvedPaths.length === 0) {
             errors.push({
               severity: "error",
               code: "MISSING_BINDING",
@@ -123,7 +116,7 @@ function checkScenarioRefs(
           }
           const enemyDef = input.enemies?.[enemyId] as Record<string, unknown> | undefined;
           const tags = Array.isArray(enemyDef?.tags) ? (enemyDef!.tags as unknown[]) : [];
-          for (const pid of resolved.paths) {
+          for (const pid of resolvedPaths) {
             if (!pathIds.has(pid)) {
               errors.push(missingRef(bp, `maps.${mapId}.paths`, pid));
               continue;

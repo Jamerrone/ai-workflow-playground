@@ -130,20 +130,21 @@ export function createEngine(
   let pending: GameEvent[] = [];
 
   const flushTickEvents = () => {
+    if (pending.length === 0) return;
+    const rewardCtx: RewardContext = {
+      world,
+      registry,
+      tickIndex,
+      emit(e: GameEvent) {
+        pending.push(e);
+      },
+    };
     while (pending.length > 0) {
       const batch = pending;
       pending = [];
       for (const event of batch) {
         const rewards = rewardsByEventKind.get(event.kind);
-        if (rewards && rewards.length > 0) {
-          const rewardCtx: RewardContext = {
-            world,
-            registry,
-            tickIndex,
-            emit(e: GameEvent) {
-              pending.push(e);
-            },
-          };
+        if (rewards) {
           for (const r of rewards) r.apply(rewardCtx, event);
         }
         deliver(event);
