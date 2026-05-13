@@ -129,7 +129,7 @@ export function createEngine(
   const kindHandlers = new Map<string, EventHandler[]>();
   let pending: GameEvent[] = [];
 
-  const flushTickEvents = () => {
+  const flushEvents = () => {
     if (pending.length === 0) return;
     const rewardCtx: RewardContext = {
       world,
@@ -176,7 +176,8 @@ export function createEngine(
     upgradeOps,
     emit(event: GameEvent) {
       // Action-produced events fire synchronously, before dispatch returns (ADR-0016).
-      deliver(event);
+      // Queue for the post-handler flush so reward handlers run on action-emitted events.
+      pending.push(event);
     },
   });
 
@@ -192,7 +193,9 @@ export function createEngine(
         `No PlayerActionHandler is registered for kind '${action.kind}'.`,
       );
     }
-    return handler.handle(buildActionContext(), action);
+    const result = handler.handle(buildActionContext(), action);
+    flushEvents();
+    return result;
   };
 
   return {
@@ -219,7 +222,7 @@ export function createEngine(
         }
       }
       world.setPhase(null);
-      flushTickEvents();
+      flushEvents();
       tickIndex++;
     },
     dispose() {
@@ -279,6 +282,9 @@ export function createEngine(
     },
     purchaseUpgrade(towerId: string, upgradeId: string) {
       return dispatch({ kind: "purchaseUpgrade", tower: towerId, upgrade: upgradeId });
+    },
+    sellTower(towerId: string) {
+      return dispatch({ kind: "sellTower", tower: towerId });
     },
     snapshot() {
       assertAlive();

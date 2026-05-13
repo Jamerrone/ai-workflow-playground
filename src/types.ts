@@ -77,10 +77,16 @@ export interface PurchaseUpgradeAction extends PlayerActionBase {
   readonly upgrade: string;
 }
 
+export interface SellTowerAction extends PlayerActionBase {
+  readonly kind: "sellTower";
+  readonly tower: string;
+}
+
 export type PlayerAction =
   | PlaceTowerAction
   | SendNextWaveAction
   | PurchaseUpgradeAction
+  | SellTowerAction
   | PlayerActionBase;
 
 export interface PlacementValidationResult {
@@ -279,5 +285,6 @@ export interface Engine {
   placeTower(towerId: string, position: Position): ActionResult;
   sendNextWave(): ActionResult;
   purchaseUpgrade(towerId: string, upgradeId: string): ActionResult;
+  sellTower(towerId: string): ActionResult;
   snapshot(): string;
 }
