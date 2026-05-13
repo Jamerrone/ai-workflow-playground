@@ -25,6 +25,7 @@ import {
   type RewardKindDef,
   type ScenarioLoadHook,
   type SystemDef,
+  type TargetingStrategyConfig,
   type TargetingStrategyDef,
   type UpgradeOpDef,
 } from "../types.js";
@@ -286,7 +287,7 @@ export function createEngine(
     sellTower(towerId: string) {
       return dispatch({ kind: "sellTower", tower: towerId });
     },
-    overrideTargeting(towerId: string, strategy) {
+    overrideTargeting(towerId: string, strategy: string | TargetingStrategyConfig) {
       return dispatch({ kind: "overrideTargeting", tower: towerId, strategy });
     },
     snapshot() {
