@@ -39,7 +39,7 @@ A unit of extension. Registers entries into one or more registries. Built-in plu
 _Avoid_: module, extension, mod
 
 **Registry**:
-A named, kernel-owned collection that plugins register entries into. The fixed catalogue of registries is the engine's only public extension surface. The catalogue: **Component**, **EntityKind**, **System**, **AttackEffect**, **TargetingStrategy**, **UpgradeOp**, **PlacementMode**, **MapFeature**, **WaveTrigger**, **RewardKind**, **GameRule**, **PlayerActionHandler**. Plugin-extensible event kinds are *not* a registry — they extend the GameEvent type via TS declaration merging.
+A named, kernel-owned collection that plugins register entries into. The fixed catalogue of registries is the engine's only public extension surface. The catalogue: **Component**, **EntityKind**, **System**, **AttackEffect**, **TargetingStrategy**, **AttackSelectionStrategy**, **UpgradeOp**, **PlacementMode**, **MapFeature**, **WaveTrigger**, **RewardKind**, **GameRule**, **PlayerActionHandler**. Plugin-extensible event kinds are *not* a registry — they extend the GameEvent type via TS declaration merging.
 _Avoid_: registrar, factory, container
 
 ### State
@@ -63,7 +63,7 @@ _Avoid_: Behavior, behavior tree, AI script, update hook
 ### Entities
 
 **Tower**:
-A stationary built archetype placed on the Map by the player, subject to the Map's PlacementMode. Carries a `cost`, one or more Attacks (or none, for pure-summoner Towers), an UpgradeTree, and a `strategy` (TargetingStrategy). May carry a `summon` Component to spawn **Guard**s.
+A stationary built archetype placed on the Map by the player, subject to the Map's PlacementMode. Carries a `cost`, one or more Attacks (or none, for pure-summoner Towers), an UpgradeTree, a `strategy` (**TargetingStrategy**), and an optional `attackSelection` (**AttackSelectionStrategy**, defaults to `declaration-order`). May carry a `summon` Component to spawn **Guard**s.
 _Avoid_: defense, building, turret
 
 **Enemy**:
@@ -89,7 +89,7 @@ _Avoid_: unit type, enemy type, category
 ### Combat
 
 **Attack**:
-A discrete offensive action belonging to an entity. Carries an `id`, a **TargetFilter**, a `stats` block (the engine-interpreted numeric properties — damage, range, cooldown), and zero or more **AttackEffect**s.
+A discrete offensive action belonging to an entity. Carries an `id`, a **TargetFilter**, a `stats` block (the engine-interpreted numeric properties — `range`, `cooldown`), and zero or more **AttackEffect**s. Damage is not a stat on the Attack itself; it lives on the AttackEffects (`damage.amount`, `splash.amount`, `dot.damagePerTick`, …), per ADR-0006.
 _Avoid_: weapon, ability, skill
 
 **AttackEffect**:
@@ -101,8 +101,12 @@ An eligibility constraint on an Attack, expressed as a `require` / `exclude` pai
 _Avoid_: targeting rules, hit conditions
 
 **TargetingStrategy**:
-The strategy by which an attacker chooses among eligible targets. Built-in: `closest-to-base`, `lowest-hp`, `highest-hp`, `tag-priority`. Re-evaluated every tick. Overridable by the player per Tower at runtime.
+The strategy by which an attacker chooses among eligible **targets**. Built-in: `closest-to-base`, `lowest-hp`, `highest-hp`, `tag-priority`. Re-evaluated every tick. Overridable by the player per Tower at runtime. Distinct from **AttackSelectionStrategy**, which chooses among the attacker's Attacks.
 _Avoid_: targeting mode, attack priority
+
+**AttackSelectionStrategy**:
+The strategy by which a multi-Attack attacker chooses which of its eligible Attacks fires this tick. Distinct from **TargetingStrategy** (which chooses the target). Built-in: `declaration-order` (default — first eligible Attack in the array wins; explicit ordering by the author) and `highest-damage` (sums each effect's expected damage via the AttackEffect's `damagePreview` and picks the largest). Plugin-registered strategies follow the same `kind`-discriminator pattern (e.g. `longest-range`, `lowest-cooldown`, `round-robin`, `weighted-random` — none shipped built-in). Re-evaluated every tick.
+_Avoid_: attack priority, attack ranking
 
 **Engagement**:
 The mutual targeting relationship between a Guard and an Enemy. An Enemy stops to engage only if it has an Attack whose `targetFilter` accepts the Guard; a Guard fires on any in-range Enemy its `targetFilter` accepts, whether or not the Enemy stopped. Unarmed Guards are "walls" — they absorb damage and die without retaliation.
