@@ -115,8 +115,6 @@ function buildAerialRegistry(): ConfigRegistry {
 }
 
 function listEnemies(snap: string): Array<{
-  id: string;
-  hp: number;
   pathId: string;
   archetype: string;
 }> {
@@ -126,8 +124,6 @@ function listEnemies(snap: string): Array<{
   return parsed.entities
     .filter((e) => e.id.startsWith("enemy:"))
     .map((e) => ({
-      id: e.id,
-      hp: (e.components.health as { hp: number }).hp,
       pathId: (e.components.pathProgress as { pathId: string }).pathId,
       archetype: (e.components.enemy as { archetype: string }).archetype,
     }));
@@ -210,7 +206,6 @@ describe("aerial enemies: targetFilter behavior (no-special-case rule)", () => {
     const reg = buildAerialRegistry();
     // Aerial enemy walks slowly so it stays in range.
     (reg.enemies as any).bat.stats.speed = 0.001;
-    (reg.maps as any).m.towerSlots = [{ x: 2, y: 4 }];
     const engine = createEngine(reg, { plugins: builtInBundle, seed: 3 });
     const fired: GameEvent[] = [];
     engine.on("towerFired", (e) => fired.push(e));
