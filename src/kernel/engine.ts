@@ -23,6 +23,7 @@ import {
   type RegistrationApi,
   type ScenarioLoadHook,
   type SystemDef,
+  type UpgradeOpDef,
 } from "../types.js";
 
 interface Registries {
@@ -31,6 +32,7 @@ interface Registries {
   actionHandlers: Map<string, ActionHandlerDef>;
   placementModes: Map<string, PlacementModeDef>;
   attackEffects: Map<string, AttackEffectDef>;
+  upgradeOps: Map<string, UpgradeOpDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
 }
 
@@ -42,6 +44,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const actionHandlers = new Map<string, ActionHandlerDef>();
   const placementModes = new Map<string, PlacementModeDef>();
   const attackEffects = new Map<string, AttackEffectDef>();
+  const upgradeOps = new Map<string, UpgradeOpDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
 
   const api: RegistrationApi = {
@@ -60,6 +63,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerAttackEffect(def) {
       attackEffects.set(def.kind, def);
     },
+    registerUpgradeOp(def) {
+      upgradeOps.set(def.kind, def);
+    },
     onScenarioLoad(hook) {
       scenarioLoadHooks.push(hook);
     },
@@ -71,6 +77,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     actionHandlers,
     placementModes,
     attackEffects,
+    upgradeOps,
     scenarioLoadHooks,
   };
 }
@@ -85,6 +92,7 @@ export function createEngine(
     actionHandlers,
     placementModes,
     attackEffects,
+    upgradeOps,
     scenarioLoadHooks,
   } = loadPlugins(options.plugins);
   for (const phase of PHASE_ORDER) {
@@ -126,6 +134,7 @@ export function createEngine(
     tickIndex,
     placementModes,
     attackEffects,
+    upgradeOps,
     emit(event: GameEvent) {
       // Action-produced events fire synchronously, before dispatch returns (ADR-0016).
       deliver(event);
@@ -158,6 +167,7 @@ export function createEngine(
         scenarioId: activeScenarioId,
         placementModes,
         attackEffects,
+        upgradeOps,
         emit(event: GameEvent) {
           pending.push(event);
         },
@@ -226,6 +236,9 @@ export function createEngine(
     },
     sendNextWave() {
       return dispatch({ kind: "sendNextWave" });
+    },
+    purchaseUpgrade(towerId: string, upgradeId: string) {
+      return dispatch({ kind: "purchaseUpgrade", tower: towerId, upgrade: upgradeId });
     },
     snapshot() {
       assertAlive();

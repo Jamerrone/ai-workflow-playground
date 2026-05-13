@@ -71,6 +71,7 @@ export const combatPlugin: Plugin = {
         for (const tower of towers) {
           const towerArche = (tower.components.get("tower") as { archetype: string }).archetype;
           const towerDef = (ctx.registry.towers as Record<string, any>)[towerArche];
+          const entityAttacks = tower.components.get("attacks") as Array<any> | undefined;
           const cd = tower.components.get("cooldownTimer") as { remaining: number };
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
           if (newRemaining > 0) {
@@ -78,7 +79,7 @@ export const combatPlugin: Plugin = {
             continue;
           }
           const towerPos = tower.components.get("position") as Position;
-          const attacks = (towerDef.attacks as Array<any>) ?? [];
+          const attacks = entityAttacks ?? ((towerDef.attacks as Array<any>) ?? []);
           if (attacks.length === 0) {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
             continue;

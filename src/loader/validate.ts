@@ -295,8 +295,84 @@ function validateUpgrade(ctx: ValidationContext, id: string, raw: Record<string,
   if (Array.isArray(raw.ops)) {
     raw.ops.forEach((op, i) => {
       if (!isObject(op)) return;
-      checkKind(ctx, "upgradeOp", op, `${path}.ops[${i}]`);
+      const opPath = `${path}.ops[${i}]`;
+      checkKind(ctx, "upgradeOp", op, opPath);
+      validateUpgradeOpFields(ctx, op, opPath);
     });
+  }
+}
+
+function validateUpgradeOpFields(
+  ctx: ValidationContext,
+  op: Record<string, unknown>,
+  path: string,
+): void {
+  const kind = op.kind;
+  if (typeof kind !== "string") return;
+  if (kind === "stat") {
+    if (typeof op.attackId !== "string") {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.attackId`,
+        message: `Upgrade op 'stat' is missing 'attackId'.`,
+        expected: "string",
+        actual: typeof op.attackId,
+      });
+    }
+    if (typeof op.field !== "string") {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.field`,
+        message: `Upgrade op 'stat' is missing 'field'.`,
+        expected: "string",
+        actual: typeof op.field,
+      });
+    }
+    const hasDelta = typeof op.delta === "number";
+    const hasFactor = typeof op.factor === "number";
+    if (!hasDelta && !hasFactor) {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.delta`,
+        message: `Upgrade op 'stat' must declare either 'delta' or 'factor'.`,
+        expected: "number on 'delta' or 'factor'",
+        actual: "neither present",
+      });
+    }
+  } else if (kind === "attackMutation") {
+    if (typeof op.attackId !== "string") {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.attackId`,
+        message: `Upgrade op 'attackMutation' is missing 'attackId'.`,
+        expected: "string",
+        actual: typeof op.attackId,
+      });
+    }
+    if (typeof op.field !== "string") {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.field`,
+        message: `Upgrade op 'attackMutation' is missing 'field'.`,
+        expected: "string",
+        actual: typeof op.field,
+      });
+    }
+    if (!("set" in op)) {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.set`,
+        message: `Upgrade op 'attackMutation' is missing 'set'.`,
+        expected: "any (the value to assign)",
+        actual: "missing",
+      });
+    }
   }
 }
 
