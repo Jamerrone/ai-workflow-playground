@@ -3,7 +3,9 @@ import {
   PHASE_ORDER,
   Phase,
   type ActionContext,
+  type GameEvent,
   type Plugin,
+  type RewardContext,
 } from "../../types.js";
 
 interface WaveState {
@@ -14,6 +16,74 @@ interface WaveState {
 }
 
 const STATE_ENTITY = "waves/state";
+const GOLD_ENTITY = "towers/state";
+
+interface MapPath {
+  readonly id: string;
+  readonly kind?: string;
+  readonly waypoints: ReadonlyArray<{ readonly x: number; readonly y: number }>;
+}
+
+interface MapData {
+  readonly paths: ReadonlyArray<MapPath>;
+}
+
+interface ScenarioWaveRef {
+  readonly id: string;
+  readonly pathBindings?: unknown;
+}
+
+interface ScenarioData {
+  readonly map: string;
+  readonly defaultPath?: string;
+  readonly waves: ReadonlyArray<ScenarioWaveRef>;
+}
+
+interface WaveGroup {
+  readonly id: string;
+  readonly enemy: string;
+  readonly count: number;
+  readonly interval?: number;
+  readonly delay?: number;
+}
+
+interface WaveData {
+  readonly groups: ReadonlyArray<WaveGroup>;
+  readonly duration?: number;
+  readonly reward?: number;
+}
+
+function resolveGroupPaths(
+  scenario: ScenarioData,
+  waveRef: ScenarioWaveRef,
+  groupId: string,
+  mapPaths: ReadonlyArray<MapPath>,
+): MapPath[] {
+  const fallback = (): MapPath[] => {
+    if (typeof scenario.defaultPath === "string") {
+      const p = mapPaths.find((p) => p.id === scenario.defaultPath);
+      return p ? [p] : [];
+    }
+    return [];
+  };
+  const bindings = waveRef.pathBindings;
+  if (bindings === undefined) return fallback();
+  if (typeof bindings === "string") {
+    if (bindings === "*") return [...mapPaths];
+    const p = mapPaths.find((p) => p.id === bindings);
+    return p ? [p] : [];
+  }
+  if (typeof bindings === "object" && bindings !== null) {
+    const value = (bindings as Record<string, unknown>)[groupId];
+    if (value === undefined) return fallback();
+    if (typeof value === "string") {
+      if (value === "*") return [...mapPaths];
+      const p = mapPaths.find((p) => p.id === value);
+      return p ? [p] : [];
+    }
+  }
+  return fallback();
+}
 
 export const wavesPlugin: Plugin = {
   id: "waves",
@@ -39,7 +109,7 @@ export const wavesPlugin: Plugin = {
     api.registerActionHandler({
       kind: "sendNextWave",
       handle(ctx) {
-        const scenario = (ctx.registry.scenarios as Record<string, { waves: Array<unknown> }>)[ctx.scenarioId];
+        const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId];
         if (!scenario) return actionFailure("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
         const wsEntity = ctx.world.get(STATE_ENTITY);
         const ws = wsEntity?.components.get("waveState") as WaveState | undefined;
@@ -75,18 +145,21 @@ export const wavesPlugin: Plugin = {
         const ws = game.components.get("waveState") as WaveState | undefined;
         if (!ws || !ws.active) return;
 
-        const scenario = (ctx.registry.scenarios as Record<string, any>)[ctx.scenarioId];
-        const map = (ctx.registry.maps as Record<string, any>)[scenario.map];
-        const waveRef = scenario.waves[ws.nextIndex];
-        const wave = (ctx.registry.waves as Record<string, any>)[waveRef.id];
+        const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId]!;
+        const map = (ctx.registry.maps as Record<string, MapData>)[scenario.map]!;
+        const waveRef = scenario.waves[ws.nextIndex]!;
+        const wave = (ctx.registry.waves as Record<string, WaveData>)[waveRef.id]!;
 
         const advanced = ws.timeInWave + ctx.dt;
         const newSent: Record<string, number> = { ...ws.sentByGroup };
         let totalSpawned = 0;
         let totalRequired = 0;
 
-        for (const group of wave.groups as Array<any>) {
-          totalRequired += group.count as number;
+        for (const group of wave.groups) {
+          const paths = resolveGroupPaths(scenario, waveRef, group.id, map.paths);
+          const perPath = group.count;
+          const required = perPath * paths.length;
+          totalRequired += required;
           const already = newSent[group.id] ?? 0;
           const sinceDelay = advanced - (group.delay ?? 0);
           if (sinceDelay < 0) {
@@ -94,26 +167,34 @@ export const wavesPlugin: Plugin = {
             continue;
           }
           const interval = group.interval ?? 0;
-          const shouldHave =
+          const shouldHavePerPath =
             interval === 0
-              ? group.count
-              : Math.min(group.count, Math.floor(sinceDelay / interval) + 1);
+              ? perPath
+              : Math.min(perPath, Math.floor(sinceDelay / interval) + 1);
+          const shouldHave = shouldHavePerPath * paths.length;
           for (let i = already; i < shouldHave; i++) {
-            const pathId = waveRef.pathBindings[group.id] as string;
-            const path = (map.paths as Array<any>).find((p) => p.id === pathId);
-            const enemyDef = (ctx.registry.enemies as Record<string, any>)[group.enemy];
-            const spawnAt = path.waypoints[0];
-            const enemyId = `enemy:${group.id}:${i}:${ctx.tickIndex}`;
+            const pathIndex = Math.floor(i / shouldHavePerPath);
+            const indexOnPath = i % shouldHavePerPath;
+            const path = paths[pathIndex]!;
+            const enemyDef = (ctx.registry.enemies as Record<string, {
+              tags?: string[];
+              stats: { hp: number; speed: number; baseDamage: number };
+              killReward: number;
+            }>)[group.enemy]!;
+            const spawnAt = path.waypoints[0]!;
+            const enemyId = `enemy:${group.id}:${path.id}:${indexOnPath}:w${ws.nextIndex}:${ctx.tickIndex}`;
             ctx.world.spawn(enemyId, {
               enemy: {
                 archetype: group.enemy,
                 killReward: enemyDef.killReward,
+                waveIndex: ws.nextIndex,
+                groupId: group.id,
                 tags: enemyDef.tags ?? [],
               },
               position: { x: spawnAt.x, y: spawnAt.y },
               health: { hp: enemyDef.stats.hp },
               pathProgress: {
-                pathId,
+                pathId: path.id,
                 wpIndex: 0,
                 speed: enemyDef.stats.speed,
                 baseDamage: enemyDef.stats.baseDamage,
@@ -130,15 +211,51 @@ export const wavesPlugin: Plugin = {
           sentByGroup: newSent,
         }));
 
-        if (totalSpawned >= totalRequired) {
-          const remaining = ctx.world.query({ all: ["enemy"] });
-          if (remaining.length === 0) {
-            ctx.world.mutate(STATE_ENTITY, "waveState", (v) => {
-              const cur = v as WaveState;
-              return { ...cur, active: false, nextIndex: cur.nextIndex + 1 };
-            });
-          }
+        const allSpawnsDone = totalSpawned >= totalRequired;
+        const thisWaveSurvivors = ctx.world.query({ all: ["enemy"] }).filter((e) => {
+          const ec = e.components.get("enemy") as { waveIndex?: number } | undefined;
+          return ec?.waveIndex === ws.nextIndex;
+        });
+        const naturalClear = allSpawnsDone && thisWaveSurvivors.length === 0;
+        const duration = wave.duration;
+        const forceClear = typeof duration === "number" && advanced >= duration;
+
+        if (naturalClear || forceClear) {
+          const surviving = thisWaveSurvivors.length;
+          const reward = typeof wave.reward === "number" ? wave.reward : 0;
+          ctx.emit({
+            kind: "waveCleared",
+            tick: ctx.tickIndex,
+            waveIndex: ws.nextIndex,
+            surviving,
+            reward,
+          });
+          ctx.world.mutate(STATE_ENTITY, "waveState", (v) => {
+            const cur = v as WaveState;
+            return { ...cur, active: false, nextIndex: cur.nextIndex + 1 };
+          });
         }
+      },
+    });
+
+    // wave-clear RewardKind: awards the wave's configured `reward` on each waveCleared event.
+    api.registerReward({
+      kind: "wave-clear",
+      eventKind: "waveCleared",
+      apply(ctx: RewardContext, event: GameEvent) {
+        const reward = (event as { reward?: number }).reward;
+        if (typeof reward !== "number" || reward === 0) return;
+        const stateEntity = ctx.world.get(GOLD_ENTITY);
+        const gold = stateEntity?.components.get("gold") as { amount: number } | undefined;
+        if (!gold) return;
+        const newAmount = gold.amount + reward;
+        ctx.world.mutate(GOLD_ENTITY, "gold", () => ({ amount: newAmount }));
+        ctx.emit({
+          kind: "goldChanged",
+          tick: ctx.tickIndex,
+          delta: reward,
+          amount: newAmount,
+        });
       },
     });
   },

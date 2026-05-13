@@ -234,12 +234,26 @@ export interface SystemDef {
   run(ctx: SystemContext): void;
 }
 
+export interface RewardContext {
+  readonly world: import("./kernel/world.js").World;
+  readonly registry: ConfigRegistry;
+  readonly tickIndex: number;
+  emit(event: GameEvent): void;
+}
+
+export interface RewardKindDef {
+  readonly kind: string;
+  readonly eventKind: string;
+  apply(ctx: RewardContext, event: GameEvent): void;
+}
+
 export interface RegistrationApi {
   registerComponent(def: ComponentDef): void;
   registerSystem(def: SystemDef): void;
   registerActionHandler(def: ActionHandlerDef): void;
   registerPlacementMode(def: PlacementModeDef): void;
   registerAttackEffect(def: AttackEffectDef): void;
+  registerReward(def: RewardKindDef): void;
   registerTargetingStrategy(def: TargetingStrategyDef): void;
   registerUpgradeOp(def: UpgradeOpDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
