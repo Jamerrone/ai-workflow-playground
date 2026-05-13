@@ -104,8 +104,36 @@ export interface ActionContext {
   readonly tickIndex: number;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
+  readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
+}
+
+export interface TargetingStrategyConfig {
+  readonly kind: string;
+  readonly [extra: string]: unknown;
+}
+
+export interface TargetingCandidate {
+  readonly id: string;
+  readonly components: ReadonlyMap<string, unknown>;
+}
+
+export interface TargetingContext {
+  readonly source: { readonly id: string; readonly position: Position };
+  readonly basePosition: Position;
+  readonly eligible: ReadonlyArray<TargetingCandidate>;
+  readonly config: TargetingStrategyConfig;
+}
+
+export type TargetingStrategyValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface TargetingStrategyDef {
+  readonly kind: string;
+  validate(config: unknown): TargetingStrategyValidationResult;
+  select(ctx: TargetingContext): TargetingCandidate | undefined;
 }
 
 export interface AttackEffectConfig {
@@ -191,6 +219,7 @@ export interface SystemContext {
   readonly scenarioId: string | null;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
+  readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
 }
@@ -211,6 +240,7 @@ export interface RegistrationApi {
   registerActionHandler(def: ActionHandlerDef): void;
   registerPlacementMode(def: PlacementModeDef): void;
   registerAttackEffect(def: AttackEffectDef): void;
+  registerTargetingStrategy(def: TargetingStrategyDef): void;
   registerUpgradeOp(def: UpgradeOpDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }
