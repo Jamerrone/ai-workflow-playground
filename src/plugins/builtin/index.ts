@@ -1,5 +1,6 @@
 import type { Plugin } from "../../types.js";
 import { towersPlugin } from "./towers.js";
+import { enemiesPlugin } from "./enemies.js";
 import { wavesPlugin } from "./waves.js";
 import { movementPlugin } from "./movement.js";
 import { combatPlugin } from "./combat.js";
@@ -15,6 +16,7 @@ export {
   attackEffectsPlugin,
   attackSelectionStrategiesPlugin,
   combatPlugin,
+  enemiesPlugin,
   mapFeaturesPlugin,
   movementPlugin,
   projectilesPlugin,
@@ -27,6 +29,7 @@ export {
 
 export const builtInBundle: readonly Plugin[] = [
   towersPlugin,
+  enemiesPlugin,
   mapFeaturesPlugin,
   wavesPlugin,
   movementPlugin,
