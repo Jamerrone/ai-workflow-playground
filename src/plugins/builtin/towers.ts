@@ -99,7 +99,10 @@ export const towersPlugin: Plugin = {
         }
         const valid = modeEntry.validate(a.position, map, ctx.world);
         if (!valid.ok) {
-          return actionFailure("INVALID_POSITION", valid.reason ?? "Invalid placement position.");
+          return actionFailure(
+            valid.code ?? "INVALID_POSITION",
+            valid.reason ?? "Invalid placement position.",
+          );
         }
 
         const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);

@@ -8,10 +8,12 @@ import { projectilesPlugin } from "./projectiles.js";
 import { targetingStrategiesPlugin } from "./targeting-strategies.js";
 import { upgradesPlugin } from "./upgrades.js";
 import { winLossPlugin } from "./win-loss.js";
+import { mapFeaturesPlugin } from "./map-features.js";
 
 export {
   attackEffectsPlugin,
   combatPlugin,
+  mapFeaturesPlugin,
   movementPlugin,
   projectilesPlugin,
   targetingStrategiesPlugin,
@@ -23,6 +25,7 @@ export {
 
 export const builtInBundle: readonly Plugin[] = [
   towersPlugin,
+  mapFeaturesPlugin,
   wavesPlugin,
   movementPlugin,
   attackEffectsPlugin,
