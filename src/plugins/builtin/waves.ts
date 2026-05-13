@@ -55,7 +55,7 @@ function resolveTrigger(scenario: ScenarioData | undefined): WaveTriggerConfig {
 
 function cooldownForTrigger(trigger: WaveTriggerConfig): number | null {
   if (trigger.kind !== "auto" && trigger.kind !== "hybrid") return null;
-  return typeof trigger.cooldown === "number" ? trigger.cooldown : 0;
+  return trigger.cooldown ?? 0;
 }
 
 interface WaveGroup {
@@ -189,45 +189,37 @@ export const wavesPlugin: Plugin = {
         const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId]!;
         const trigger = resolveTrigger(scenario);
 
-        // Inactive but auto/hybrid: tick the cooldown timer. When it reaches
-        // zero we activate the next wave and fall through into the spawn loop
-        // so the first enemy appears on the same tick the wave starts (parity
-        // with manual sendNextWave, which mutates state between ticks).
+        // Inactive: either advance the auto/hybrid cooldown timer or stay idle.
+        // A non-null `cooldownRemaining` implies the trigger is auto/hybrid —
+        // manual scenarios never set one.
         if (!ws.active) {
-          if (
-            (trigger.kind === "auto" || trigger.kind === "hybrid") &&
-            ws.nextIndex < scenario.waves.length &&
-            ws.cooldownRemaining !== null
-          ) {
-            const next = ws.cooldownRemaining - ctx.dt;
-            // Epsilon guard: 10 subtractions of 0.1 from 1.0 leaves ~1.4e-16,
-            // not 0. Treating sub-nanosecond residue as "elapsed" makes the
-            // trigger fire at the expected `cooldown / dt`-th tick instead of
-            // one tick later.
-            if (next > 1e-9) {
-              ctx.world.mutate(STATE_ENTITY, "waveState", (v) => ({
-                ...(v as WaveState),
-                cooldownRemaining: next,
-              }));
-              return;
-            }
+          if (ws.cooldownRemaining === null || ws.nextIndex >= scenario.waves.length) return;
+
+          const remaining = ws.cooldownRemaining - ctx.dt;
+          // Epsilon guard: 10 subtractions of 0.1 from 1.0 leaves ~1.4e-16,
+          // not 0. Treating sub-nanosecond residue as "elapsed" makes the
+          // trigger fire at the expected `cooldown / dt`-th tick instead of
+          // one tick later.
+          if (remaining > 1e-9) {
             ctx.world.mutate(STATE_ENTITY, "waveState", (v) => ({
               ...(v as WaveState),
-              active: true,
-              cooldownRemaining: null,
-              timeInWave: 0,
-              sentByGroup: {},
+              cooldownRemaining: remaining,
             }));
-            ws = ctx.world.get(STATE_ENTITY)!.components.get("waveState") as WaveState;
-            ctx.emit({
-              kind: "waveStarted",
-              tick: ctx.tickIndex,
-              waveIndex: ws.nextIndex,
-              trigger: trigger.kind,
-            });
-          } else {
             return;
           }
+
+          // Cooldown elapsed: activate the next wave and fall through into the
+          // spawn loop so the first enemy appears on the same tick the wave
+          // starts (parity with manual sendNextWave, which mutates state
+          // between ticks).
+          ws = { ...ws, active: true, cooldownRemaining: null, timeInWave: 0, sentByGroup: {} };
+          ctx.world.mutate(STATE_ENTITY, "waveState", () => ws!);
+          ctx.emit({
+            kind: "waveStarted",
+            tick: ctx.tickIndex,
+            waveIndex: ws.nextIndex,
+            trigger: trigger.kind,
+          });
         }
 
         const map = (ctx.registry.maps as Record<string, MapData>)[scenario.map]!;
