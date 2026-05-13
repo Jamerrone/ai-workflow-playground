@@ -30,7 +30,17 @@ export const AERIAL_GRUNT: EnemyArchetype = {
 // plugins already own the runtime side — but it exists as the canonical home
 // of built-in Enemy archetype data. Scenarios compose archetypes into their
 // own ConfigRegistry by referencing the exported constants.
+//
+// Registers the `enemy` EntityKind declaring the Component bundle entities of
+// that kind compose. The Components themselves are owned by the waves plugin
+// (which co-owns the runtime spawn path); cross-plugin Component references
+// are validated by the kernel once every plugin has loaded.
 export const enemiesPlugin: Plugin = {
   id: "enemies",
-  register() {},
+  register(api) {
+    api.registerEntityKind({
+      kind: "enemy",
+      components: ["enemy", "position", "health", "pathProgress"],
+    });
+  },
 };

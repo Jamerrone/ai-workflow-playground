@@ -13,6 +13,7 @@ import {
   type ComponentDef,
   type ConfigRegistry,
   type Engine,
+  type EntityKindDef,
   type EngineOptions,
   type EventHandler,
   type GameEvent,
@@ -36,6 +37,7 @@ import {
 
 interface Registries {
   components: Map<string, ComponentDef>;
+  entityKinds: Map<string, EntityKindDef>;
   systemsByPhase: Map<Phase, SystemDef[]>;
   actionHandlers: Map<string, ActionHandlerDef>;
   placementModes: Map<string, PlacementModeDef>;
@@ -50,6 +52,7 @@ interface Registries {
 
 function loadPlugins(plugins: readonly Plugin[]): Registries {
   const components = new Map<string, ComponentDef>();
+  const entityKinds = new Map<string, EntityKindDef>();
   const systemsByPhase = new Map<Phase, SystemDef[]>(
     PHASE_ORDER.map((p) => [p, []]),
   );
@@ -66,6 +69,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const api: RegistrationApi = {
     registerComponent(def) {
       components.set(def.name, def);
+    },
+    registerEntityKind(def) {
+      entityKinds.set(def.kind, def);
     },
     registerSystem(def) {
       systemsByPhase.get(def.phase)!.push(def);
@@ -104,8 +110,24 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     },
   };
   for (const plugin of plugins) plugin.register(api);
+
+  // Fail fast: every Component an EntityKind references must be registered by
+  // some (possibly other) plugin. Validated after all plugins load so two
+  // plugins can collaborate — e.g. enemiesPlugin registers `kind: "enemy"`
+  // referencing Components owned by wavesPlugin.
+  for (const ek of entityKinds.values()) {
+    for (const c of ek.components) {
+      if (!components.has(c)) {
+        throw new Error(
+          `EntityKind '${ek.kind}' references unregistered Component '${c}'.`,
+        );
+      }
+    }
+  }
+
   return {
     components,
+    entityKinds,
     systemsByPhase,
     actionHandlers,
     placementModes,
@@ -126,6 +148,7 @@ export function createEngine(
   const {
     systemsByPhase,
     components,
+    entityKinds,
     actionHandlers,
     placementModes,
     mapFeatures,
@@ -191,6 +214,7 @@ export function createEngine(
     registry,
     scenarioId: activeScenarioId!,
     tickIndex,
+    entityKinds,
     placementModes,
     mapFeatures,
     attackEffects,
@@ -233,6 +257,7 @@ export function createEngine(
         world,
         registry,
         scenarioId: activeScenarioId,
+        entityKinds,
         placementModes,
         mapFeatures,
         attackEffects,

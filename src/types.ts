@@ -35,6 +35,11 @@ export interface ComponentDef {
   readonly writableIn: readonly Phase[];
 }
 
+export interface EntityKindDef {
+  readonly kind: string;
+  readonly components: readonly string[];
+}
+
 export interface GameEvent {
   readonly kind: string;
   readonly tick: number;
@@ -131,6 +136,7 @@ export interface ActionContext {
   readonly registry: ConfigRegistry;
   readonly scenarioId: string;
   readonly tickIndex: number;
+  readonly entityKinds: ReadonlyMap<string, EntityKindDef>;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly mapFeatures: ReadonlyMap<string, MapFeatureDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
@@ -305,6 +311,7 @@ export interface SystemContext {
   readonly world: import("./kernel/world.js").World;
   readonly registry: ConfigRegistry;
   readonly scenarioId: string | null;
+  readonly entityKinds: ReadonlyMap<string, EntityKindDef>;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly mapFeatures: ReadonlyMap<string, MapFeatureDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
@@ -339,6 +346,7 @@ export interface RewardKindDef {
 
 export interface RegistrationApi {
   registerComponent(def: ComponentDef): void;
+  registerEntityKind(def: EntityKindDef): void;
   registerSystem(def: SystemDef): void;
   registerActionHandler(def: ActionHandlerDef): void;
   registerPlacementMode(def: PlacementModeDef): void;
