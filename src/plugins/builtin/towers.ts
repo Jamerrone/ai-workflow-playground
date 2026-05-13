@@ -31,6 +31,8 @@ export const towersPlugin: Plugin = {
     api.registerComponent({ name: "position", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "cooldownTimer", writableIn: [Phase.Simulation] });
     api.registerComponent({ name: "gold", writableIn: [Phase.Reward] });
+    api.registerComponent({ name: "attacks", writableIn: PHASE_ORDER });
+    api.registerComponent({ name: "purchasedUpgrades", writableIn: PHASE_ORDER });
 
     // Built-in PlacementMode: fixed. Placement is legal only on a pre-declared TowerSlot.
     api.registerPlacementMode({
@@ -91,6 +93,8 @@ export const towersPlugin: Plugin = {
           tower: { archetype: a.tower },
           position: { x: a.position.x, y: a.position.y },
           cooldownTimer: { remaining: 0 },
+          attacks: structuredClone(towerDef.attacks),
+          purchasedUpgrades: [] as string[],
         });
         const newGold = goldComp.amount - towerDef.cost;
         ctx.world.mutate("towers/state", "gold", () => ({ amount: newGold }));

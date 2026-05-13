@@ -119,6 +119,7 @@ function checkUpgradeRefs(
   errors: LoaderError[],
 ): void {
   const upgrades = input.upgrades ?? {};
+  // Pass 1: missing-reference checks on prerequisites + effectId.
   for (const [uid, u] of Object.entries(upgrades)) {
     if (!isObject(u)) continue;
     if (Array.isArray(u.prerequisites)) {
@@ -154,6 +155,53 @@ function checkUpgradeRefs(
         }
       });
     }
+  }
+  // Pass 2: prerequisite cycle detection via DFS for back-edges. Dedupe by the
+  // sorted set of nodes on the cycle path so a 2-cycle "a ↔ b" emits a single
+  // UPGRADE_PREREQ_CYCLE regardless of which side we entered from.
+  const reportedCycles = new Set<string>();
+  for (const uid of Object.keys(upgrades)) {
+    detectCycle(uid, upgrades, reportedCycles, errors);
+  }
+}
+
+function detectCycle(
+  start: string,
+  upgrades: Record<string, unknown>,
+  reported: Set<string>,
+  errors: LoaderError[],
+): void {
+  const stack: string[] = [start];
+  const seen = new Set<string>([start]);
+  while (stack.length > 0) {
+    const id = stack[stack.length - 1]!;
+    const entry = upgrades[id];
+    const prereqs = isObject(entry) && Array.isArray(entry.prerequisites) ? entry.prerequisites : [];
+    let advanced = false;
+    for (const pre of prereqs) {
+      if (typeof pre !== "string") continue;
+      if (pre === start) {
+        const key = stack.slice().sort().join(",");
+        if (!reported.has(key)) {
+          reported.add(key);
+          errors.push({
+            severity: "error",
+            code: "UPGRADE_PREREQ_CYCLE",
+            path: `upgrades.${start}.prerequisites`,
+            message: `Circular prerequisite chain: ${[...stack, start].join(" → ")}.`,
+            hint: "Break the cycle by removing a prerequisite edge.",
+          });
+        }
+        return;
+      }
+      if (!seen.has(pre) && upgrades[pre] !== undefined) {
+        seen.add(pre);
+        stack.push(pre);
+        advanced = true;
+        break;
+      }
+    }
+    if (!advanced) stack.pop();
   }
 }
 

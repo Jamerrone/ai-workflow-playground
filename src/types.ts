@@ -71,7 +71,17 @@ export interface SendNextWaveAction extends PlayerActionBase {
   readonly kind: "sendNextWave";
 }
 
-export type PlayerAction = PlaceTowerAction | SendNextWaveAction | PlayerActionBase;
+export interface PurchaseUpgradeAction extends PlayerActionBase {
+  readonly kind: "purchaseUpgrade";
+  readonly tower: string;
+  readonly upgrade: string;
+}
+
+export type PlayerAction =
+  | PlaceTowerAction
+  | SendNextWaveAction
+  | PurchaseUpgradeAction
+  | PlayerActionBase;
 
 export interface PlacementValidationResult {
   readonly ok: boolean;
@@ -95,6 +105,7 @@ export interface ActionContext {
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
+  readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
 }
 
@@ -171,6 +182,25 @@ export interface AttackEffectDef {
   apply(ctx: AttackEffectContext): void;
 }
 
+export type UpgradeOpValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface UpgradeOpContext {
+  readonly tickIndex: number;
+  readonly world: import("./kernel/world.js").World;
+  readonly registry: ConfigRegistry;
+  readonly tower: import("./kernel/world.js").Entity;
+  readonly op: Readonly<Record<string, unknown>>;
+  emit(event: GameEvent): void;
+}
+
+export interface UpgradeOpDef {
+  readonly kind: string;
+  validate(op: unknown): UpgradeOpValidationResult;
+  apply(ctx: UpgradeOpContext): void;
+}
+
 export interface ActionHandlerDef<
   A extends PlayerAction = PlayerAction,
   E = unknown,
@@ -190,6 +220,7 @@ export interface SystemContext {
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
+  readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   emit(event: GameEvent): void;
 }
 
@@ -210,6 +241,7 @@ export interface RegistrationApi {
   registerPlacementMode(def: PlacementModeDef): void;
   registerAttackEffect(def: AttackEffectDef): void;
   registerTargetingStrategy(def: TargetingStrategyDef): void;
+  registerUpgradeOp(def: UpgradeOpDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }
 
@@ -232,5 +264,6 @@ export interface Engine {
   dispatch(action: PlayerAction): ActionResult;
   placeTower(towerId: string, position: Position): ActionResult;
   sendNextWave(): ActionResult;
+  purchaseUpgrade(towerId: string, upgradeId: string): ActionResult;
   snapshot(): string;
 }
