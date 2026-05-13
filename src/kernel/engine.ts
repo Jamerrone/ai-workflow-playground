@@ -15,6 +15,7 @@ import {
   type EngineOptions,
   type EventHandler,
   type GameEvent,
+  type MapFeatureDef,
   type Phase,
   type PlacementModeDef,
   type PlayerAction,
@@ -34,6 +35,7 @@ interface Registries {
   systemsByPhase: Map<Phase, SystemDef[]>;
   actionHandlers: Map<string, ActionHandlerDef>;
   placementModes: Map<string, PlacementModeDef>;
+  mapFeatures: Map<string, MapFeatureDef>;
   attackEffects: Map<string, AttackEffectDef>;
   rewardsByEventKind: Map<string, RewardKindDef[]>;
   targetingStrategies: Map<string, TargetingStrategyDef>;
@@ -48,6 +50,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   );
   const actionHandlers = new Map<string, ActionHandlerDef>();
   const placementModes = new Map<string, PlacementModeDef>();
+  const mapFeatures = new Map<string, MapFeatureDef>();
   const attackEffects = new Map<string, AttackEffectDef>();
   const rewardsByEventKind = new Map<string, RewardKindDef[]>();
   const targetingStrategies = new Map<string, TargetingStrategyDef>();
@@ -66,6 +69,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     },
     registerPlacementMode(def) {
       placementModes.set(def.kind, def);
+    },
+    registerMapFeature(def) {
+      mapFeatures.set(def.kind, def);
     },
     registerAttackEffect(def) {
       attackEffects.set(def.kind, def);
@@ -94,6 +100,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     systemsByPhase,
     actionHandlers,
     placementModes,
+    mapFeatures,
     attackEffects,
     rewardsByEventKind,
     targetingStrategies,
@@ -111,6 +118,7 @@ export function createEngine(
     components,
     actionHandlers,
     placementModes,
+    mapFeatures,
     attackEffects,
     rewardsByEventKind,
     targetingStrategies,
@@ -171,6 +179,7 @@ export function createEngine(
     scenarioId: activeScenarioId!,
     tickIndex,
     placementModes,
+    mapFeatures,
     attackEffects,
     targetingStrategies,
     upgradeOps,
@@ -208,6 +217,7 @@ export function createEngine(
         registry,
         scenarioId: activeScenarioId,
         placementModes,
+        mapFeatures,
         attackEffects,
         targetingStrategies,
         upgradeOps,

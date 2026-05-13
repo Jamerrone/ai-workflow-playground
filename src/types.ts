@@ -92,6 +92,12 @@ export type PlayerAction =
 export interface PlacementValidationResult {
   readonly ok: boolean;
   readonly reason?: string;
+  /**
+   * Optional override of the default `INVALID_POSITION` failure code so a
+   * PlacementMode can distinguish failure categories (e.g. `INVALID_PLACEMENT`
+   * vs `SLOT_OCCUPIED`).
+   */
+  readonly code?: string;
 }
 
 export interface PlacementModeDef {
@@ -103,12 +109,22 @@ export interface PlacementModeDef {
   ): PlacementValidationResult;
 }
 
+export type MapFeatureValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface MapFeatureDef {
+  readonly kind: string;
+  validate(feature: unknown): MapFeatureValidationResult;
+}
+
 export interface ActionContext {
   readonly world: import("./kernel/world.js").World;
   readonly registry: ConfigRegistry;
   readonly scenarioId: string;
   readonly tickIndex: number;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
+  readonly mapFeatures: ReadonlyMap<string, MapFeatureDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
@@ -224,6 +240,7 @@ export interface SystemContext {
   readonly registry: ConfigRegistry;
   readonly scenarioId: string | null;
   readonly placementModes: ReadonlyMap<string, PlacementModeDef>;
+  readonly mapFeatures: ReadonlyMap<string, MapFeatureDef>;
   readonly attackEffects: ReadonlyMap<string, AttackEffectDef>;
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
@@ -258,6 +275,7 @@ export interface RegistrationApi {
   registerSystem(def: SystemDef): void;
   registerActionHandler(def: ActionHandlerDef): void;
   registerPlacementMode(def: PlacementModeDef): void;
+  registerMapFeature(def: MapFeatureDef): void;
   registerAttackEffect(def: AttackEffectDef): void;
   registerReward(def: RewardKindDef): void;
   registerTargetingStrategy(def: TargetingStrategyDef): void;
