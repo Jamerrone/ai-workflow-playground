@@ -13,6 +13,10 @@ interface WaveState {
   active: boolean;
   timeInWave: number;
   sentByGroup: Record<string, number>;
+  // Seconds remaining before the next auto/hybrid Wave activates. `null` means
+  // no cooldown is currently in flight — either the Scenario is manual-triggered,
+  // or there are no more Waves to start.
+  cooldownRemaining: number | null;
 }
 
 const STATE_ENTITY = "waves/state";
@@ -33,10 +37,25 @@ interface ScenarioWaveRef {
   readonly pathBindings?: unknown;
 }
 
+interface WaveTriggerConfig {
+  readonly kind: string;
+  readonly cooldown?: number;
+}
+
 interface ScenarioData {
   readonly map: string;
   readonly defaultPath?: string;
   readonly waves: ReadonlyArray<ScenarioWaveRef>;
+  readonly waveTrigger?: WaveTriggerConfig;
+}
+
+function resolveTrigger(scenario: ScenarioData | undefined): WaveTriggerConfig {
+  return scenario?.waveTrigger ?? { kind: "manual" };
+}
+
+function cooldownForTrigger(trigger: WaveTriggerConfig): number | null {
+  if (trigger.kind !== "auto" && trigger.kind !== "hybrid") return null;
+  return typeof trigger.cooldown === "number" ? trigger.cooldown : 0;
 }
 
 interface WaveGroup {
@@ -99,22 +118,37 @@ export const wavesPlugin: Plugin = {
     api.registerComponent({ name: "waveState", writableIn: PHASE_ORDER });
 
     api.onScenarioLoad((ctx: ActionContext) => {
+      const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId];
+      const trigger = resolveTrigger(scenario);
       ctx.world.spawn(STATE_ENTITY, {
         waveState: {
           nextIndex: 0,
           active: false,
           timeInWave: 0,
           sentByGroup: {} as Record<string, number>,
+          // For auto / hybrid, the timer drives Wave 0 as well — players get a
+          // pre-wave countdown UI window before the first spawn.
+          cooldownRemaining: cooldownForTrigger(trigger),
         },
       });
     });
 
-    // sendNextWave PlayerAction handler. The manual WaveTrigger advances only on this action.
+    // sendNextWave PlayerAction handler. The manual and hybrid WaveTriggers
+    // accept this action; auto rejects it because auto Scenarios are
+    // non-interactive at the wave-advance level.
     api.registerActionHandler({
       kind: "sendNextWave",
       handle(ctx) {
         const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId];
         if (!scenario) return actionFailure("NO_SCENARIO_LOADED", "Active scenario not found in registry.");
+        const trigger = resolveTrigger(scenario);
+        if (trigger.kind === "auto") {
+          return actionFailure(
+            "AUTO_TRIGGER_NOT_INTERACTIVE",
+            "Auto-triggered Scenarios advance via cooldown; sendNextWave is not accepted.",
+            "Use waveTrigger 'hybrid' or 'manual' to allow player-driven wave starts.",
+          );
+        }
         const wsEntity = ctx.world.get(STATE_ENTITY);
         const ws = wsEntity?.components.get("waveState") as WaveState | undefined;
         if (!ws) return actionFailure("NO_SCENARIO_LOADED", "Wave state missing.");
@@ -127,11 +161,14 @@ export const wavesPlugin: Plugin = {
           active: true,
           timeInWave: 0,
           sentByGroup: {},
+          // Hybrid: a force-start clears the in-flight cooldown.
+          cooldownRemaining: null,
         }));
         ctx.emit({
           kind: "waveStarted",
           tick: ctx.tickIndex,
           waveIndex: ws.nextIndex,
+          trigger: trigger.kind,
         });
         return { ok: true, effect: { waveIndex: ws.nextIndex } };
       },
@@ -146,10 +183,53 @@ export const wavesPlugin: Plugin = {
         if (!ctx.scenarioId) return;
         const game = ctx.world.get(STATE_ENTITY);
         if (!game) return;
-        const ws = game.components.get("waveState") as WaveState | undefined;
-        if (!ws || !ws.active) return;
+        let ws = game.components.get("waveState") as WaveState | undefined;
+        if (!ws) return;
 
         const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId]!;
+        const trigger = resolveTrigger(scenario);
+
+        // Inactive but auto/hybrid: tick the cooldown timer. When it reaches
+        // zero we activate the next wave and fall through into the spawn loop
+        // so the first enemy appears on the same tick the wave starts (parity
+        // with manual sendNextWave, which mutates state between ticks).
+        if (!ws.active) {
+          if (
+            (trigger.kind === "auto" || trigger.kind === "hybrid") &&
+            ws.nextIndex < scenario.waves.length &&
+            ws.cooldownRemaining !== null
+          ) {
+            const next = ws.cooldownRemaining - ctx.dt;
+            // Epsilon guard: 10 subtractions of 0.1 from 1.0 leaves ~1.4e-16,
+            // not 0. Treating sub-nanosecond residue as "elapsed" makes the
+            // trigger fire at the expected `cooldown / dt`-th tick instead of
+            // one tick later.
+            if (next > 1e-9) {
+              ctx.world.mutate(STATE_ENTITY, "waveState", (v) => ({
+                ...(v as WaveState),
+                cooldownRemaining: next,
+              }));
+              return;
+            }
+            ctx.world.mutate(STATE_ENTITY, "waveState", (v) => ({
+              ...(v as WaveState),
+              active: true,
+              cooldownRemaining: null,
+              timeInWave: 0,
+              sentByGroup: {},
+            }));
+            ws = ctx.world.get(STATE_ENTITY)!.components.get("waveState") as WaveState;
+            ctx.emit({
+              kind: "waveStarted",
+              tick: ctx.tickIndex,
+              waveIndex: ws.nextIndex,
+              trigger: trigger.kind,
+            });
+          } else {
+            return;
+          }
+        }
+
         const map = (ctx.registry.maps as Record<string, MapData>)[scenario.map]!;
         const waveRef = scenario.waves[ws.nextIndex]!;
         const wave = (ctx.registry.waves as Record<string, WaveData>)[waveRef.id]!;
@@ -232,7 +312,14 @@ export const wavesPlugin: Plugin = {
           });
           ctx.world.mutate(STATE_ENTITY, "waveState", (v) => {
             const cur = v as WaveState;
-            return { ...cur, active: false, nextIndex: cur.nextIndex + 1 };
+            const moreWaves = cur.nextIndex + 1 < scenario.waves.length;
+            const nextCooldown = moreWaves ? cooldownForTrigger(trigger) : null;
+            return {
+              ...cur,
+              active: false,
+              nextIndex: cur.nextIndex + 1,
+              cooldownRemaining: nextCooldown,
+            };
           });
         }
       },
