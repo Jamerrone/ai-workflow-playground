@@ -280,7 +280,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     await sandbox.run({
       name: "reviewer",
       maxIterations: 1,
-      agent: sandcastle.claudeCode("claude-opus-4-7"),
+      agent: sandcastle.claudeCode("claude-sonnet-4-6"),
       promptFile: "./.sandcastle/review-prompt.md",
     });
 
@@ -337,7 +337,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     const prAuthor = await sandbox.run({
       name: "pr-author",
       maxIterations: 1,
-      agent: sandcastle.claudeCode("claude-opus-4-7"),
+      agent: sandcastle.claudeCode("claude-sonnet-4-6"),
       promptFile: "./.sandcastle/pr-prompt.md",
       promptArgs: {
         TASK_ID: issueId,
