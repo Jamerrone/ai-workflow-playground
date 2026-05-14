@@ -1,0 +1,6 @@
+{
+  "tags": ["aerial", "flying"],
+  "stats": { "hp": 6, "speed": 1.5, "baseDamage": 1 },
+  "killReward": 8,
+  "meta": { "name": "Bat" }
+}

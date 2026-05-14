@@ -1,0 +1,7 @@
+{
+  "groups": [
+    { "id": "g_ground", "enemy": "grunt", "count": 2, "interval": 0.5, "delay": 0 },
+    { "id": "g_sky", "enemy": "bat", "count": 2, "interval": 1, "delay": 0.5 }
+  ],
+  "reward": 50
+}

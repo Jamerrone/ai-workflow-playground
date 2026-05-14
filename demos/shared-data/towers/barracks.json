@@ -1,0 +1,13 @@
+{
+  "cost": 0,
+  "attacks": [],
+  "components": {
+    "summon": {
+      "summons": "guard-footman",
+      "maxCount": 2,
+      "respawnCooldown": 5,
+      "rallyPointRange": 6
+    }
+  },
+  "meta": { "name": "Barracks" }
+}

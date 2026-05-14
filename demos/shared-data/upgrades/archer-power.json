@@ -1,0 +1,14 @@
+{
+  "tower": "archer",
+  "cost": 20,
+  "ops": [
+    {
+      "kind": "stat",
+      "attackId": "shot",
+      "effectId": "main",
+      "field": "amount",
+      "delta": 5
+    }
+  ],
+  "meta": { "name": "Heavy Arrows" }
+}

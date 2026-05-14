@@ -1,0 +1,17 @@
+{
+  "cost": 60,
+  "targeting": { "kind": "closest-to-base" },
+  "attacks": [
+    {
+      "id": "shell",
+      "stats": { "range": 5, "cooldown": 1 },
+      "targetFilter": { "exclude": ["flying"] },
+      "effects": [
+        { "kind": "damage", "id": "core", "stats": { "amount": 4 } },
+        { "kind": "splash", "stats": { "radius": 1.5, "amount": 2 } },
+        { "kind": "slow", "stats": { "factor": 0.5, "duration": 1.5 } }
+      ]
+    }
+  ],
+  "meta": { "name": "Mortar Tower" }
+}

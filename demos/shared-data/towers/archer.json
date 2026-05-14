@@ -1,0 +1,16 @@
+{
+  "cost": 20,
+  "targeting": { "kind": "closest-to-base" },
+  "upgradeTree": ["archer-power"],
+  "attacks": [
+    {
+      "id": "shot",
+      "stats": { "range": 4, "cooldown": 0.5 },
+      "targetFilter": { "exclude": ["flying"] },
+      "effects": [
+        { "kind": "damage", "id": "main", "stats": { "amount": 5 } }
+      ]
+    }
+  ],
+  "meta": { "name": "Archer Tower" }
+}

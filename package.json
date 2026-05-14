@@ -10,7 +10,8 @@
     "sandcastle": "npx tsx .sandcastle/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:cli": "npx tsx demos/cli/main.ts"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,15 @@
+{
+  "hp": 8,
+  "speed": 1,
+  "idleRegen": 1,
+  "attacks": [
+    {
+      "id": "stab",
+      "stats": { "range": 2, "cooldown": 1 },
+      "effects": [
+        { "kind": "damage", "stats": { "amount": 2 } }
+      ]
+    }
+  ],
+  "meta": { "name": "Footman" }
+}

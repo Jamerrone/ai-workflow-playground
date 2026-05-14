@@ -373,7 +373,7 @@ export const guardsPlugin: Plugin = {
             0,
           );
           if (maxRange <= 0) {
-            ctx.world.mutate(g.id, "engagement", () => ({ enemy: undefined }));
+            ctx.world.mutate(g.id, "engagement", () => ({}));
             continue;
           }
           let chosen: string | undefined;
@@ -394,7 +394,7 @@ export const guardsPlugin: Plugin = {
             engagedCount.set(chosen, (engagedCount.get(chosen) ?? 0) + 1);
             ctx.world.mutate(g.id, "engagement", () => ({ enemy: chosen }));
           } else {
-            ctx.world.mutate(g.id, "engagement", () => ({ enemy: undefined }));
+            ctx.world.mutate(g.id, "engagement", () => ({}));
           }
         }
       },
