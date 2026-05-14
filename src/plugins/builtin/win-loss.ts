@@ -27,15 +27,16 @@ export const winLossPlugin: Plugin = {
   register(api) {
     api.registerComponent({ name: "bases", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "scenarioStatus", writableIn: [Phase.Rule] });
+    api.registerGameRule({ key: "globalBaseHealth", default: 100 });
 
     api.onScenarioLoad((ctx: ActionContext) => {
-      const scenarios = ctx.registry.scenarios as Record<string, { map: string; gameRuleOverrides?: { globalBaseHealth?: number } }>;
+      const scenarios = ctx.registry.scenarios as Record<string, { map: string }>;
       const scenario = scenarios[ctx.scenarioId];
       if (!scenario) return;
       const maps = ctx.registry.maps as Record<string, { bases: Array<{ id: string; position: { x: number; y: number } }> }>;
       const map = maps[scenario.map];
       if (!map) return;
-      const baseHealth = scenario.gameRuleOverrides?.globalBaseHealth ?? 100;
+      const baseHealth = ctx.gameRules.get("globalBaseHealth") as number;
       ctx.world.spawn(STATE_ENTITY, {
         bases: {
           entries: map.bases.map((b) => ({ id: b.id, position: b.position, hp: baseHealth })),
