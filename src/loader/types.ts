@@ -52,6 +52,16 @@ export interface LoaderOptions {
    * every Attack effect whose kind is not in the combined set.
    */
   readonly damagePreviewKinds?: ReadonlySet<string>;
+  /**
+   * GameRule keys some plugin registers via `registerGameRule`. When supplied,
+   * a Scenario's `gameRuleOverrides` referencing any key outside this set
+   * triggers an UNKNOWN_GAME_RULE error (mirrors UNKNOWN_KIND). Omitting the
+   * option disables the check (back-compat for callers that don't yet wire
+   * plugin metadata into the Loader).
+   */
+  readonly knownGameRuleKeys?: ReadonlySet<string>;
+  /** Optional `key → registering plugin id` map; populates the UNKNOWN_GAME_RULE hint. */
+  readonly knownGameRuleHints?: ReadonlyMap<string, string>;
 }
 
 export const BUCKETS = [
