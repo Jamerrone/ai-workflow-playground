@@ -56,6 +56,20 @@ function setupBarracksScenario(probe?: Plugin) {
         },
       },
     },
+    summons: {
+      "guard-footman": {
+        hp: 10,
+        speed: 0,
+        idleRegen: 0,
+        attacks: [
+          {
+            id: "stab",
+            stats: { range: 3, cooldown: 1 },
+            effects: [{ kind: "damage", stats: { amount: 1 } }],
+          },
+        ],
+      },
+    },
     scenarios: {
       s: {
         map: "m",
@@ -331,6 +345,406 @@ describe("guards plugin: skeleton", () => {
     expect(samples[0]).toEqual([3]);
     expect(samples[1]).toEqual([5]);
     expect(samples[2]).toEqual([5]);
+  });
+
+  describe("event payload shapes", () => {
+    it("emits guardSpawned, guardDied, rallyPointMoved, guardAttacked, entityHealed with documented payloads", () => {
+      const events: GameEvent[] = [];
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/orchestrator",
+            phase: Phase.Wave,
+            reads: ["guard", "health"],
+            writes: ["enemy", "position", "health"],
+            run(ctx) {
+              if (ctx.tickIndex === 0) {
+                // Damage a guard then heal it via the heal AttackEffect.
+                const guard = ctx.world.query({ all: ["guard"] })[0]!;
+                ctx.world.mutate(guard.id, "health", (h) => ({
+                  ...(h as object),
+                  hp: 4,
+                }));
+                const heal = ctx.attackEffects.get("heal")!;
+                heal.apply({
+                  tickIndex: ctx.tickIndex,
+                  dt: ctx.dt,
+                  world: ctx.world,
+                  registry: ctx.registry,
+                  fire: {
+                    source: { id: "test/healer", position: { x: 0, y: 0 } },
+                    primaryTarget: { id: guard.id, position: { x: 0, y: 0 } },
+                    attack: { id: "mend", stats: {} },
+                    effects: [{ kind: "heal", stats: { amount: 3 } }],
+                  },
+                  effect: { kind: "heal", stats: { amount: 3 } },
+                  state: { targets: [guard.id], abort: false },
+                  emit: ctx.emit,
+                });
+                // Inject an enemy so the guard fires next tick.
+                ctx.world.spawn("e:1", {
+                  enemy: { archetype: "grunt", tags: [] },
+                  position: { x: 2, y: 1 },
+                  health: { hp: 100, max: 100 },
+                });
+              }
+              if (ctx.tickIndex === 2) {
+                // Kill the guard by zeroing its HP, triggering guardDied via guards/death.
+                const guard = ctx.world.query({ all: ["guard"] })[0];
+                if (guard)
+                  ctx.world.mutate(guard.id, "health", (h) => ({
+                    ...(h as object),
+                    hp: 0,
+                  }));
+              }
+            },
+          });
+        },
+      };
+      const engine = setupBarracksScenario(probe);
+      engine.onEvent((e) => events.push(e));
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(1); // tick 0: spawn (initial), heal, inject enemy, engage, fire
+      engine.tick(1); // tick 1: fire again
+      engine.dispose();
+
+      const spawned = events.find((e) => e.kind === "guardSpawned");
+      expect(spawned).toMatchObject({
+        kind: "guardSpawned",
+        tick: expect.any(Number),
+        guard: expect.stringMatching(/^guard:/),
+        tower: "tower:barracks:1,1",
+        archetype: "guard-footman",
+        position: { x: 1, y: 1 },
+      });
+
+      const moved = events.find((e) => e.kind === "rallyPointMoved");
+      expect(moved).toBeUndefined(); // we didn't dispatch one in this test
+
+      const healed = events.find((e) => e.kind === "entityHealed");
+      expect(healed).toMatchObject({
+        kind: "entityHealed",
+        tick: expect.any(Number),
+        entity: expect.stringMatching(/^guard:/),
+        delta: 3,
+        hp: 7,
+        source: "test/healer",
+        attackId: "mend",
+      });
+
+      const attacked = events.find((e) => e.kind === "guardAttacked");
+      expect(attacked).toMatchObject({
+        kind: "guardAttacked",
+        tick: expect.any(Number),
+        guard: expect.stringMatching(/^guard:/),
+        enemy: "e:1",
+        attackId: "stab",
+      });
+    });
+
+    it("emits rallyPointMoved with the new position and tower", () => {
+      const events: GameEvent[] = [];
+      const engine = setupBarracksScenario();
+      engine.onEvent((e) => events.push(e));
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 3, y: 1 },
+      });
+      engine.dispose();
+
+      const moved = events.find((e) => e.kind === "rallyPointMoved");
+      expect(moved).toMatchObject({
+        kind: "rallyPointMoved",
+        tick: expect.any(Number),
+        tower: "tower:barracks:1,1",
+        position: { x: 3, y: 1 },
+      });
+    });
+
+    it("emits guardDied with guard + tower when a Guard's hp drops to 0", () => {
+      const events: GameEvent[] = [];
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/kill",
+            phase: Phase.Wave,
+            reads: ["guard"],
+            writes: ["health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              const guard = ctx.world.query({ all: ["guard"] })[0];
+              if (guard)
+                ctx.world.mutate(guard.id, "health", (h) => ({
+                  ...(h as object),
+                  hp: 0,
+                }));
+            },
+          });
+        },
+      };
+      const engine = setupBarracksScenario(probe);
+      engine.onEvent((e) => events.push(e));
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(1);
+      engine.dispose();
+
+      const died = events.find((e) => e.kind === "guardDied");
+      expect(died).toMatchObject({
+        kind: "guardDied",
+        tick: expect.any(Number),
+        guard: expect.stringMatching(/^guard:/),
+        tower: "tower:barracks:1,1",
+      });
+    });
+  });
+
+  describe("live rally re-path during engagement", () => {
+    it("moveRallyPoint dispatched while a Guard is engaged updates rallyPoint immediately", () => {
+      let rallyBefore: { x: number; y: number } | null = null;
+      let rallyAfter: { x: number; y: number } | null = null;
+      let engagedDuringDispatch = false;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/inject-enemy",
+            phase: Phase.Wave,
+            reads: [],
+            writes: ["enemy", "position", "health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              ctx.world.spawn("e:1", {
+                enemy: { archetype: "grunt", tags: [] },
+                position: { x: 2, y: 1 },
+                health: { hp: 1000, max: 1000 },
+              });
+            },
+          });
+          api.registerSystem({
+            id: "test/sample-before",
+            phase: Phase.Emit,
+            reads: ["tower", "rallyPoint", "guard", "engagement"],
+            writes: [],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              const t = ctx.world.query({ all: ["tower", "rallyPoint"] })[0];
+              rallyBefore = t?.components.get("rallyPoint") as {
+                x: number;
+                y: number;
+              };
+              engagedDuringDispatch = ctx.world
+                .query({ all: ["guard", "engagement"] })
+                .some((g) => {
+                  const e = g.components.get("engagement") as { enemy?: string };
+                  return e.enemy === "e:1";
+                });
+            },
+          });
+          api.registerSystem({
+            id: "test/sample-after",
+            phase: Phase.Emit,
+            reads: ["tower", "rallyPoint"],
+            writes: [],
+            run(ctx) {
+              if (ctx.tickIndex !== 1) return;
+              const t = ctx.world.query({ all: ["tower", "rallyPoint"] })[0];
+              rallyAfter = t?.components.get("rallyPoint") as {
+                x: number;
+                y: number;
+              };
+            },
+          });
+        },
+      };
+      const engine = setupBarracksScenario(probe);
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0.5); // tick 0: enemy injected, engagement assigned to nearby enemy
+      // Mid-engagement: dispatch moveRallyPoint to a Path tile.
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 4, y: 1 },
+      });
+      engine.tick(0.5); // tick 1: sample after
+      engine.dispose();
+
+      expect(engagedDuringDispatch).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(rallyBefore).toEqual({ x: 1, y: 1 });
+      expect(rallyAfter).toEqual({ x: 4, y: 1 });
+    });
+  });
+
+  describe("end-to-end demo flow", () => {
+    it("spawn → walk → engage → idle regen → wave-clear heal in one run", () => {
+      // Probes:
+      // - tick 0 sample: guards are spawned at the Tower.
+      // - tick 3 sample after rally moves: guards have walked toward rally.
+      // - inject enemy, tick once: guard engages and damages it.
+      // - kill enemy; idle regen restores HP.
+      // - emit waveCleared; HP returns to max instantly.
+      const damage = (g: { components: ReadonlyMap<string, unknown> }) =>
+        (g.components.get("health") as { hp: number }).hp;
+
+      const collected = {
+        spawnTickPositions: [] as Array<{ x: number; y: number }>,
+        afterWalkPositions: [] as Array<{ x: number; y: number }>,
+        engagedHpOnEnemy: -1,
+        regenHpOnGuardAfterRegen: -1,
+        hpAfterWaveClear: -1,
+      };
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/director",
+            phase: Phase.Wave,
+            reads: ["guard", "health", "tower"],
+            writes: ["enemy", "position", "health", "rallyPoint"],
+            run(ctx) {
+              if (ctx.tickIndex === 1) {
+                // Move rally to (4,1) so guards walk away from tower.
+                for (const t of ctx.world.query({ all: ["tower", "rallyPoint"] })) {
+                  ctx.world.mutate(t.id, "rallyPoint", () => ({ x: 4, y: 1 }));
+                }
+              }
+              if (ctx.tickIndex === 5) {
+                // Inject an enemy within guard attack range of (4,1).
+                ctx.world.spawn("e:1", {
+                  enemy: { archetype: "grunt", tags: [] },
+                  position: { x: 5, y: 1 },
+                  health: { hp: 4, max: 4 },
+                });
+              }
+              if (ctx.tickIndex === 7) {
+                // Damage one surviving guard, then emit waveCleared next tick.
+                const guards = ctx.world.query({ all: ["guard", "health"] });
+                if (guards[0]) {
+                  ctx.world.mutate(guards[0].id, "health", (h) => ({
+                    ...(h as object),
+                    hp: 3,
+                  }));
+                }
+              }
+              if (ctx.tickIndex === 9) {
+                ctx.emit({ kind: "waveCleared", tick: ctx.tickIndex });
+              }
+            },
+          });
+          api.registerSystem({
+            id: "test/sampler",
+            phase: Phase.Emit,
+            reads: ["guard", "position", "health"],
+            writes: [],
+            run(ctx) {
+              const guards = ctx.world.query({ all: ["guard"] });
+              if (ctx.tickIndex === 0) {
+                collected.spawnTickPositions = guards.map(
+                  (g) => g.components.get("position") as { x: number; y: number },
+                );
+              }
+              if (ctx.tickIndex === 4) {
+                collected.afterWalkPositions = guards.map(
+                  (g) => g.components.get("position") as { x: number; y: number },
+                );
+              }
+              if (ctx.tickIndex === 5) {
+                const enemy = ctx.world.get("e:1");
+                if (enemy)
+                  collected.engagedHpOnEnemy = (
+                    enemy.components.get("health") as { hp: number }
+                  ).hp;
+              }
+              if (ctx.tickIndex === 8) {
+                if (guards[0]) collected.regenHpOnGuardAfterRegen = damage(guards[0]);
+              }
+              if (ctx.tickIndex === 10) {
+                if (guards[0]) collected.hpAfterWaveClear = damage(guards[0]);
+              }
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 8,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [
+              { x: 1, y: 1 },
+              { x: 2, y: 1 },
+              { x: 3, y: 1 },
+              { x: 4, y: 1 },
+              { x: 5, y: 1 },
+            ],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 3,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": {
+            hp: 5,
+            speed: 1,
+            idleRegen: 2,
+            attacks: [
+              {
+                id: "stab",
+                stats: { range: 2, cooldown: 1 },
+                effects: [{ kind: "damage", stats: { amount: 2 } }],
+              },
+            ],
+          },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      for (let i = 0; i < 11; i++) engine.tick(1);
+      engine.dispose();
+
+      // Spawn: 3 guards at the tower position.
+      expect(collected.spawnTickPositions).toHaveLength(3);
+      for (const p of collected.spawnTickPositions) {
+        expect(p).toEqual({ x: 1, y: 1 });
+      }
+      // After 3 ticks of walking at speed 1 toward rally (4,1), guards are at x=4.
+      for (const p of collected.afterWalkPositions) {
+        expect(p.x).toBeGreaterThanOrEqual(3.5);
+      }
+      // Engage: at tick 4, enemy hp=4 going in; guards fire (cooldown 1) →
+      // at least one guard deals 2 damage in same tick as spawn (engagement
+      // assigned same tick). Sampler captures end-of-tick: hp ≤ 2.
+      expect(collected.engagedHpOnEnemy).toBeLessThanOrEqual(2);
+      // Idle regen after enemy killed: by tick 8 guard should have regenerated.
+      // Tick 7 damages to hp=3; tick 8 enemy long gone, guard regens +2 → 5.
+      expect(collected.regenHpOnGuardAfterRegen).toBeGreaterThanOrEqual(4);
+      // Wave-clear heal at tick 9 → tick 10 sample sees max HP.
+      expect(collected.hpAfterWaveClear).toBe(5);
+    });
   });
 
   describe("unarmed wall guard", () => {
