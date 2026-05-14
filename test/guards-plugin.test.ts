@@ -592,7 +592,7 @@ describe("guards plugin: skeleton", () => {
                 fire: {
                   source: { id: "test/healer", position: { x: 0, y: 0 } },
                   primaryTarget: { id: target.id, position: { x: 0, y: 0 } },
-                  attack: { id: "mend", stats: {}, targetFilter: undefined },
+                  attack: { id: "mend", stats: {} },
                   effects: [{ kind: "heal", stats: { amount: 5 } }],
                 },
                 effect: { kind: "heal", stats: { amount: 5 } },
