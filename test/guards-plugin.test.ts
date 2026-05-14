@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createEngine, Phase } from "../src/index.js";
-import type { Plugin, SystemContext } from "../src/index.js";
+import type { GameEvent, Plugin, Position, SystemContext } from "../src/index.js";
 import { builtInBundle } from "../src/plugins/builtin/index.js";
 import { emptyRegistry } from "./helpers/empty-registry.js";
 
@@ -25,9 +25,18 @@ function setupBarracksScenario(probe?: Plugin) {
     ...emptyRegistry(),
     maps: {
       m: {
-        width: 3,
+        width: 5,
         height: 3,
-        paths: [],
+        paths: [
+          {
+            id: "main",
+            kind: "ground",
+            waypoints: [
+              { x: 2, y: 1 },
+              { x: 4, y: 1 },
+            ],
+          },
+        ],
         bases: [],
         placementMode: { kind: "fixed" },
         towerSlots: [{ x: 1, y: 1 }],
@@ -322,6 +331,400 @@ describe("guards plugin: skeleton", () => {
     expect(samples[0]).toEqual([3]);
     expect(samples[1]).toEqual([5]);
     expect(samples[2]).toEqual([5]);
+  });
+
+  describe("idle regen", () => {
+    it("regenerates idleRegen HP/sec while not engaged; caps at max; pauses when engaged", () => {
+      const hpSamples: number[] = [];
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/damage-and-inject",
+            phase: Phase.Wave,
+            reads: ["guard", "health"],
+            writes: ["health", "enemy", "position"],
+            run(ctx) {
+              if (ctx.tickIndex === 0) {
+                for (const g of ctx.world.query({ all: ["guard"] })) {
+                  ctx.world.mutate(g.id, "health", (h) => ({
+                    ...(h as object),
+                    hp: 5,
+                  }));
+                }
+              }
+              if (ctx.tickIndex === 4) {
+                ctx.world.spawn("e:1", {
+                  enemy: { archetype: "grunt" },
+                  position: { x: 1, y: 1 },
+                  health: { hp: 100, max: 100 },
+                });
+              }
+            },
+          });
+          api.registerSystem({
+            id: "test/peek-hp",
+            phase: Phase.Emit,
+            reads: ["guard", "health"],
+            writes: [],
+            run(ctx) {
+              const guards = ctx.world.query({ all: ["guard"] });
+              const hp = (guards[0]?.components.get("health") as { hp: number })?.hp;
+              hpSamples.push(hp);
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": {
+            hp: 10,
+            speed: 0,
+            idleRegen: 2,
+            attacks: [
+              {
+                id: "stab",
+                stats: { range: 5, cooldown: 1 },
+                effects: [{ kind: "damage", stats: { amount: 1 } }],
+              },
+            ],
+          },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+
+      // Tick 0: damage→5 in Wave, no regen yet (Simulation runs after Wave but
+      //   guard's health is 5 going in, idleRegen=2 → 7. Wait, the Wave damage
+      //   happens this tick BEFORE Simulation regen.). Actually: Wave runs
+      //   damage→5; Simulation runs idleRegen (no engagement) →+2=7.
+      // Subsequent ticks: +2 each, capped at 10.
+      engine.tick(1);
+      engine.tick(1);
+      engine.tick(1);
+      engine.tick(1);
+      engine.tick(1); // tick 4: enemy injected in Wave; engagement assigned in Sim; no regen.
+      engine.tick(1); // tick 5: engaged; no regen.
+      engine.dispose();
+
+      expect(hpSamples).toEqual([7, 9, 10, 10, 10, 10]);
+    });
+  });
+
+  describe("engagement + enemyEngagementCap", () => {
+    it("with enemyEngagementCap=2 and 3 Guards in range of 1 Enemy, exactly 2 engage", () => {
+      let engagementCounts: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          // Inject 1 Enemy at (3,1) on tick 0, then sample engagement count on tick 0.
+          api.registerSystem({
+            id: "test/inject-enemy",
+            phase: Phase.Wave,
+            reads: [],
+            writes: ["enemy", "position", "health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              ctx.world.spawn("e:1", {
+                enemy: { archetype: "grunt" },
+                position: { x: 3, y: 1 },
+                health: { hp: 10, max: 10 },
+              });
+            },
+          });
+          api.registerSystem({
+            id: "test/peek-engagements",
+            phase: Phase.Emit,
+            reads: ["engagement"],
+            writes: [],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              const guards = ctx.world.query({ all: ["guard", "engagement"] });
+              engagementCounts = guards.filter((g) => {
+                const e = g.components.get("engagement") as
+                  | { enemy?: string }
+                  | undefined;
+                return e?.enemy === "e:1";
+              }).length;
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 3,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": {
+            hp: 10,
+            speed: 0,
+            idleRegen: 0,
+            attacks: [
+              {
+                id: "stab",
+                stats: { range: 5, cooldown: 1 },
+                effects: [{ kind: "damage", stats: { amount: 1 } }],
+              },
+            ],
+          },
+        },
+        scenarios: {
+          s: {
+            map: "m",
+            waves: [],
+            waveTrigger: { kind: "manual" },
+            gameRuleOverrides: { enemyEngagementCap: 2 },
+          },
+        },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0.1);
+      engine.dispose();
+
+      expect(engagementCounts).toBe(2);
+    });
+  });
+
+  describe("moveRallyPoint action", () => {
+    it("returns UNKNOWN_TOWER when the tower entity does not exist", () => {
+      const engine = setupBarracksScenario();
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:does-not-exist",
+        position: { x: 2, y: 1 },
+      });
+      engine.dispose();
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.code).toBe("UNKNOWN_TOWER");
+    });
+
+    it("returns OUT_OF_RANGE when the destination exceeds summon.rallyPointRange (Euclidean)", () => {
+      const engine = setupBarracksScenario();
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      // rallyPointRange is 4 (from setupBarracksScenario). Tower is at (1,1).
+      // (1+4, 1+4) is sqrt(32) ≈ 5.66 → out of range. (1+3, 1+0) = 3 is in range.
+      const far = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 5, y: 5 },
+      });
+      const near = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 4, y: 1 },
+      });
+      engine.dispose();
+      expect(far.ok).toBe(false);
+      expect(!far.ok && far.code).toBe("OUT_OF_RANGE");
+      expect(near.ok).toBe(true);
+    });
+
+    it("returns INVALID_RALLY_TILE when the destination is a Base tile", () => {
+      // Custom scenario: place a Base at (2,1) within range of the Barracks at (1,1).
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [{ id: "main", position: { x: 2, y: 1 } }],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 4,
+              },
+            },
+          },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 2, y: 1 }, // base tile
+      });
+      engine.dispose();
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.code).toBe("INVALID_RALLY_TILE");
+    });
+
+    it("accepts a destination on a Path tile even when not a placeable slot", () => {
+      // setupBarracksScenario has a Path running (2,1)→(4,1). (3,1) is on the
+      // path but not a tower slot.
+      const engine = setupBarracksScenario();
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 3, y: 1 },
+      });
+      engine.dispose();
+      expect(result.ok).toBe(true);
+    });
+
+    it("rejects a destination that is neither a Path tile nor placeable", () => {
+      // (2,2) is off-path and not a slot under `fixed` mode → reject.
+      const engine = setupBarracksScenario();
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 2, y: 2 },
+      });
+      engine.dispose();
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.code).toBe("INVALID_RALLY_TILE");
+    });
+
+    it("returns INVALID_RALLY_TILE when the destination is occupied by another Tower", () => {
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }, { x: 3, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 4,
+              },
+            },
+          },
+          plain: { cost: 0, attacks: [] },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.placeTower("plain", { x: 3, y: 1 });
+
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 3, y: 1 }, // occupied by the plain tower
+      });
+      engine.dispose();
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.code).toBe("INVALID_RALLY_TILE");
+    });
+
+    it("on success, updates the Tower's rallyPoint and emits rallyPointMoved", () => {
+      const events: GameEvent[] = [];
+      const engine = setupBarracksScenario();
+      engine.onEvent((e) => events.push(e));
+      engine.placeTower("barracks", { x: 1, y: 1 });
+
+      const result = engine.dispatch({
+        kind: "moveRallyPoint",
+        tower: "tower:barracks:1,1",
+        position: { x: 2, y: 1 },
+      });
+      engine.dispose();
+
+      expect(result.ok).toBe(true);
+      expect(result.ok && (result.effect as { position: Position }).position).toEqual({
+        x: 2,
+        y: 1,
+      });
+      const moved = events.find((e) => e.kind === "rallyPointMoved");
+      expect(moved).toBeDefined();
+      expect((moved as unknown as { tower: string }).tower).toBe("tower:barracks:1,1");
+      expect((moved as unknown as { position: Position }).position).toEqual({
+        x: 2,
+        y: 1,
+      });
+    });
   });
 
   it("registers `summon` Component (config attached to Tower archetypes)", () => {

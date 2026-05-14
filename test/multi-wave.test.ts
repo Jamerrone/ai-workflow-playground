@@ -34,6 +34,7 @@ function buildMultiWaveRegistry(): ConfigRegistry {
         killReward: 5,
       },
     },
+    summons: {},
     waves: {
       w1: {
         groups: [{ id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 }],
@@ -111,6 +112,7 @@ function buildTwoPathRegistry(): ConfigRegistry {
         killReward: 0,
       },
     },
+    summons: {},
     waves: {
       wDefault: {
         groups: [{ id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 }],

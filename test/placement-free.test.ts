@@ -55,6 +55,7 @@ function buildFreePlacementRegistry(): ConfigRegistry {
         killReward: 10,
       },
     },
+    summons: {},
     waves: {
       w1: {
         groups: [{ id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 }],
