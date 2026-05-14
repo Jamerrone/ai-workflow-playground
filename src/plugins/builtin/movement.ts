@@ -24,8 +24,11 @@ export const movementPlugin: Plugin = {
       // gated on the `enemy` Component.
       id: "movement/pathWalk",
       phase: Phase.Simulation,
-      reads: ["pathProgress", "statusEffects"],
+      reads: ["pathProgress", "statusEffects", "engagement"],
       writes: ["position", "pathProgress"],
+      // Run AFTER engagement assignment so an Enemy that just acquired a Guard
+      // target this tick halts immediately (ADR-0010 rule 2).
+      after: ["enemies/engagement"],
       run(ctx) {
         if (!ctx.scenarioId) return;
         const scenario = (ctx.registry.scenarios as Record<string, any>)[ctx.scenarioId];
@@ -33,6 +36,13 @@ export const movementPlugin: Plugin = {
 
         const walkers = ctx.world.query({ all: ["position", "pathProgress"] });
         for (const e of walkers) {
+          // Engaged Enemies halt to fight. Walkers without an `engagement`
+          // component (e.g. summons spawned with pathProgress alone) walk
+          // normally — the absence of engagement is "not engaged".
+          const eng = e.components.get("engagement") as
+            | { target?: string }
+            | undefined;
+          if (eng?.target) continue;
           const pp = e.components.get("pathProgress") as PathProgress;
           const pos = e.components.get("position") as Position;
           const path = (map.paths as Array<any>).find((p) => p.id === pp.pathId);

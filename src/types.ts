@@ -324,6 +324,20 @@ export interface ActionHandlerDef<
 
 export type ScenarioLoadHook = (ctx: ActionContext) => void;
 
+export interface FireAttackRequest {
+  readonly attacker: string;
+  readonly attack: {
+    readonly id: string;
+    readonly stats: Readonly<Record<string, unknown>>;
+    readonly effects: ReadonlyArray<AttackEffectConfig>;
+    readonly targetFilter?: {
+      readonly require?: readonly string[];
+      readonly exclude?: readonly string[];
+    };
+  };
+  readonly primaryTarget: string;
+}
+
 export interface SystemContext {
   readonly tickIndex: number;
   readonly dt: number;
@@ -339,6 +353,16 @@ export interface SystemContext {
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
   readonly gameRules: ReadonlyMap<string, unknown>;
   emit(event: GameEvent): void;
+  /**
+   * Queue a fire on the unified attack pipeline. The kernel verifies the
+   * attacker is off cooldown, pushes the resolved attack into `pendingFires`
+   * for `attack-effects/apply` to consume next phase, and sets the attacker's
+   * `cooldownTimer` to `attack.stats.cooldown`. Returns `true` iff a fire was
+   * queued; `false` if the attacker is missing, on cooldown, or the target is
+   * missing. The caller is responsible for the domain-specific `*Attacked`
+   * event payload, since payload shapes differ across Tower / Guard / Enemy.
+   */
+  fireAttack(req: FireAttackRequest): boolean;
 }
 
 export interface SystemDef {

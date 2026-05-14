@@ -539,8 +539,8 @@ describe("guards plugin: skeleton", () => {
               engagedDuringDispatch = ctx.world
                 .query({ all: ["guard", "engagement"] })
                 .some((g) => {
-                  const e = g.components.get("engagement") as { enemy?: string };
-                  return e.enemy === "e:1";
+                  const e = g.components.get("engagement") as { target?: string };
+                  return e.target === "e:1";
                 });
             },
           });
@@ -1445,7 +1445,7 @@ describe("guards plugin: skeleton", () => {
   });
 
   describe("engagement + enemyEngagementCap", () => {
-    it("with enemyEngagementCap=2 and 3 Guards in range of 1 Enemy, exactly 2 engage", () => {
+    it("with 1 Enemy and 3 Guards in range, all 3 Guards engage (cap is enemies-per-Guard, not the reverse)", () => {
       let engagementCounts: number | null = null;
       const probe: Plugin = {
         id: "test/probe",
@@ -1475,9 +1475,9 @@ describe("guards plugin: skeleton", () => {
               const guards = ctx.world.query({ all: ["guard", "engagement"] });
               engagementCounts = guards.filter((g) => {
                 const e = g.components.get("engagement") as
-                  | { enemy?: string }
+                  | { target?: string }
                   | undefined;
-                return e?.enemy === "e:1";
+                return e?.target === "e:1";
               }).length;
             },
           });
@@ -1541,7 +1541,7 @@ describe("guards plugin: skeleton", () => {
       engine.tick(0.1);
       engine.dispose();
 
-      expect(engagementCounts).toBe(2);
+      expect(engagementCounts).toBe(3);
     });
   });
 

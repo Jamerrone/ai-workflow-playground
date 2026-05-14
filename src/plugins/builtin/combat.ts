@@ -10,21 +10,8 @@ import {
 } from "../../types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
-const PENDING_FIRES_ENTITY = "attack-effects/pending";
-const FIRES_COMPONENT = "pendingFires";
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = { kind: "declaration-order" };
-
-interface PendingFire {
-  source: { id: string; position: Position };
-  primaryTarget: { id: string; position: Position };
-  attack: {
-    id: string;
-    stats: Record<string, unknown>;
-    targetFilter?: { require?: string[]; exclude?: string[] };
-  };
-  effects: ReadonlyArray<{ kind: string; id?: string; stats?: Record<string, unknown> }>;
-}
 
 function dist(a: Position, b: Position): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -62,22 +49,16 @@ export const combatPlugin: Plugin = {
         const towers = ctx.world.query({ all: ["tower", "position", "cooldownTimer"] });
         const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
 
-        const pendingState = ctx.world.get(PENDING_FIRES_ENTITY);
-        const queue =
-          (pendingState?.components.get(FIRES_COMPONENT) as { queue: PendingFire[] } | undefined)
-            ?.queue ?? [];
-        const newFires: PendingFire[] = [];
-
         for (const tower of towers) {
           const towerArche = (tower.components.get("tower") as { archetype: string }).archetype;
           const towerDef = (ctx.registry.towers as Record<string, any>)[towerArche];
           const entityAttacks = tower.components.get("attacks") as Array<any> | undefined;
           const cd = tower.components.get("cooldownTimer") as { remaining: number };
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
-          if (newRemaining > 0) {
-            ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: newRemaining }));
-            continue;
-          }
+          // Always write the decremented cooldown so `ctx.fireAttack` reads
+          // the post-decrement value when it checks readiness.
+          ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: newRemaining }));
+          if (newRemaining > 0) continue;
           const towerPos = tower.components.get("position") as Position;
           const attacks = entityAttacks ?? ((towerDef.attacks as Array<any>) ?? []);
           if (attacks.length === 0) {
@@ -155,19 +136,19 @@ export const combatPlugin: Plugin = {
           }
 
           const targetPos = firedTarget.components.get("position") as Position;
-          newFires.push({
-            source: { id: tower.id, position: { ...towerPos } },
-            primaryTarget: { id: firedTarget.id, position: { ...targetPos } },
+          const fired = ctx.fireAttack({
+            attacker: tower.id,
             attack: {
               id: firedAttack.id,
               stats: { ...firedAttack.stats },
-              targetFilter: firedAttack.targetFilter,
+              effects: (firedAttack.effects as ReadonlyArray<AttackEffectConfig>) ?? [],
+              ...(firedAttack.targetFilter !== undefined
+                ? { targetFilter: firedAttack.targetFilter }
+                : {}),
             },
-            effects: (firedAttack.effects as Array<any>) ?? [],
+            primaryTarget: firedTarget.id,
           });
-          ctx.world.mutate(tower.id, "cooldownTimer", () => ({
-            remaining: firedAttack.stats.cooldown,
-          }));
+          if (!fired) continue;
           ctx.emit({
             kind: "towerFired",
             tick: ctx.tickIndex,
@@ -177,12 +158,6 @@ export const combatPlugin: Plugin = {
             targetPosition: { ...targetPos },
             attackId: firedAttack.id,
           });
-        }
-
-        if (newFires.length > 0 && pendingState) {
-          ctx.world.mutate(PENDING_FIRES_ENTITY, FIRES_COMPONENT, () => ({
-            queue: [...queue, ...newFires],
-          }));
         }
       },
     });
