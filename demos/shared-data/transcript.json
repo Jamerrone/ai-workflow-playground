@@ -1,0 +1,16 @@
+{
+  "scenario": "defend-the-pass",
+  "seed": 42,
+  "dt": 0.1,
+  "maxTicks": 800,
+  "actions": [
+    [0, { "kind": "placeTower", "tower": "mortar",   "position": { "x": 4,  "y": 2 } }],
+    [0, { "kind": "placeTower", "tower": "archer",   "position": { "x": 15, "y": 2 } }],
+    [0, { "kind": "placeTower", "tower": "anti-air", "position": { "x": 10, "y": 5 } }],
+    [0, { "kind": "placeTower", "tower": "barracks", "position": { "x": 15, "y": 5 } }],
+    [0, { "kind": "purchaseUpgrade", "tower": "tower:archer:15,2", "upgrade": "archer-power" }],
+    [0, { "kind": "overrideTargeting", "tower": "tower:archer:15,2", "strategy": "lowest-hp" }],
+    [0, { "kind": "moveRallyPoint", "tower": "tower:barracks:15,5", "position": { "x": 14, "y": 1 } }],
+    [120, { "kind": "sellTower", "tower": "tower:mortar:4,2" }]
+  ]
+}

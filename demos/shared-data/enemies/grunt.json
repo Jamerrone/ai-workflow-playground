@@ -1,0 +1,6 @@
+{
+  "tags": ["ground"],
+  "stats": { "hp": 10, "speed": 1, "baseDamage": 1 },
+  "killReward": 5,
+  "meta": { "name": "Grunt" }
+}

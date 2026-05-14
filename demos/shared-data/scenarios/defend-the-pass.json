@@ -1,0 +1,26 @@
+{
+  "map": "twin-pass",
+  "difficulty": "standard",
+  "waves": [
+    {
+      "id": "wave-1",
+      "pathBindings": { "g_ground": "ground-lane" }
+    },
+    {
+      "id": "wave-2",
+      "pathBindings": { "g_ground": "ground-lane", "g_sky": "sky-lane" }
+    },
+    {
+      "id": "wave-3",
+      "pathBindings": { "g_ground": "ground-lane", "g_sky": "sky-lane" }
+    }
+  ],
+  "waveTrigger": { "kind": "auto", "cooldown": 1 },
+  "gameRuleOverrides": {
+    "globalBaseHealth": 30,
+    "startingGold": 200,
+    "enemyEngagementCap": 3,
+    "defaultSellRefundPercent": 0.7
+  },
+  "meta": { "name": "Defend the Pass" }
+}

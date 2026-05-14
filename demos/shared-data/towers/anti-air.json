@@ -1,0 +1,15 @@
+{
+  "cost": 40,
+  "targeting": { "kind": "closest-to-base" },
+  "attacks": [
+    {
+      "id": "flak",
+      "stats": { "range": 6, "cooldown": 0.3 },
+      "targetFilter": { "require": ["flying"] },
+      "effects": [
+        { "kind": "damage", "stats": { "amount": 4 } }
+      ]
+    }
+  ],
+  "meta": { "name": "Anti-Air Battery" }
+}
