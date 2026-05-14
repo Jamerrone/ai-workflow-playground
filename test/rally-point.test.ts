@@ -99,8 +99,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("out-of-range");
+    expect(result).toMatchObject({ ok: false, reason: "out-of-range" });
   });
 
   it("returns base-tile when destination is a Base tile", () => {
@@ -116,8 +115,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("base-tile");
+    expect(result).toMatchObject({ ok: false, reason: "base-tile" });
   });
 
   it("returns tower-occupied when another Tower sits on the destination", () => {
@@ -140,8 +138,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("tower-occupied");
+    expect(result).toMatchObject({ ok: false, reason: "tower-occupied" });
   });
 
   it("does not flag the tower being validated as 'occupying' its own destination", () => {
@@ -174,8 +171,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("blocked-region");
+    expect(result).toMatchObject({ ok: false, reason: "blocked-region" });
   });
 
   it("returns not-placeable when destination is neither on a Path nor placement-mode-valid", () => {
@@ -189,8 +185,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("not-placeable");
+    expect(result).toMatchObject({ ok: false, reason: "not-placeable" });
   });
 
   it("checks distance before tile-type — out-of-range wins over base-tile", () => {
@@ -206,8 +201,7 @@ describe("validateRallyPoint", () => {
       world,
       placementModes,
     });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toBe("out-of-range");
+    expect(result).toMatchObject({ ok: false, reason: "out-of-range" });
   });
 });
 
