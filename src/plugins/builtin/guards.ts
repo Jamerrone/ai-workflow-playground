@@ -22,6 +22,11 @@ import {
   matchesFilter,
   entityTags,
 } from "./attack-shared.js";
+import {
+  validateRallyPoint,
+  type RallyPointFailureReason,
+  type RallyPointMapShape,
+} from "./rally-point.js";
 
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = {
@@ -70,30 +75,32 @@ interface SummonState {
   pendingRespawns: number;
 }
 
-interface MapShape {
-  readonly bases?: ReadonlyArray<{ readonly position: Position }>;
-  readonly paths?: ReadonlyArray<{ readonly waypoints?: ReadonlyArray<Position> }>;
-  readonly placementMode: { readonly kind: string };
-}
+const RALLY_FAILURE_CODE: Record<RallyPointFailureReason, string> = {
+  "out-of-range": "OUT_OF_RANGE",
+  "base-tile": "INVALID_RALLY_TILE",
+  "tower-occupied": "INVALID_RALLY_TILE",
+  "blocked-region": "INVALID_RALLY_TILE",
+  "not-placeable": "INVALID_RALLY_TILE",
+};
 
-function pathContains(
-  pos: Position,
-  waypoints: ReadonlyArray<Position>,
-): boolean {
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const a = waypoints[i]!;
-    const b = waypoints[i + 1]!;
-    if (a.x === b.x && pos.x === a.x) {
-      const lo = Math.min(a.y, b.y);
-      const hi = Math.max(a.y, b.y);
-      if (pos.y >= lo && pos.y <= hi) return true;
-    } else if (a.y === b.y && pos.y === a.y) {
-      const lo = Math.min(a.x, b.x);
-      const hi = Math.max(a.x, b.x);
-      if (pos.x >= lo && pos.x <= hi) return true;
-    }
+function rallyFailureMessage(
+  reason: RallyPointFailureReason,
+  position: Position,
+  towerPosition: Position,
+  rallyPointRange: number,
+): string {
+  switch (reason) {
+    case "out-of-range":
+      return `Destination (${position.x},${position.y}) is beyond rallyPointRange ${rallyPointRange} from Tower at (${towerPosition.x},${towerPosition.y}).`;
+    case "base-tile":
+      return `Destination (${position.x},${position.y}) is a Base tile.`;
+    case "tower-occupied":
+      return `Destination (${position.x},${position.y}) is occupied by another Tower.`;
+    case "blocked-region":
+      return `Destination (${position.x},${position.y}) is inside a BlockedRegion.`;
+    case "not-placeable":
+      return `Destination (${position.x},${position.y}) is neither a Path tile nor a placeable tile.`;
   }
-  return false;
 }
 
 export const guardsPlugin: Plugin = {
@@ -703,20 +710,14 @@ export const guardsPlugin: Plugin = {
           );
         }
         const towerPos = tower.components.get("position") as Position;
-        const dx = a.position.x - towerPos.x;
-        const dy = a.position.y - towerPos.y;
-        if (dx * dx + dy * dy > summon.rallyPointRange * summon.rallyPointRange) {
-          return actionFailure(
-            "OUT_OF_RANGE",
-            `Destination (${a.position.x},${a.position.y}) is beyond rallyPointRange ${summon.rallyPointRange} from Tower at (${towerPos.x},${towerPos.y}).`,
-          );
-        }
         const scenario = (ctx.registry.scenarios as Record<
           string,
           { map: string } | undefined
         >)[ctx.scenarioId];
         const map = scenario
-          ? (ctx.registry.maps as Record<string, MapShape | undefined>)[scenario.map]
+          ? (ctx.registry.maps as Record<string, RallyPointMapShape | undefined>)[
+              scenario.map
+            ]
           : undefined;
         if (!map) {
           return actionFailure(
@@ -724,58 +725,24 @@ export const guardsPlugin: Plugin = {
             `Active map not found in registry.`,
           );
         }
-        const onBase = (map.bases ?? []).some(
-          (b) => b.position.x === a.position.x && b.position.y === a.position.y,
-        );
-        if (onBase) {
+        const result = validateRallyPoint({
+          position: a.position,
+          towerPosition: towerPos,
+          towerId: a.tower,
+          rallyPointRange: summon.rallyPointRange,
+          map,
+          world: ctx.world,
+          placementModes: ctx.placementModes,
+        });
+        if (!result.ok) {
           return actionFailure(
-            "INVALID_RALLY_TILE",
-            `Destination (${a.position.x},${a.position.y}) is a Base tile.`,
-          );
-        }
-        const towerOnTile = ctx.world
-          .query({ all: ["tower", "position"] })
-          .some((other) => {
-            if (other.id === a.tower) return false;
-            const p = other.components.get("position") as Position;
-            return p.x === a.position.x && p.y === a.position.y;
-          });
-        if (towerOnTile) {
-          return actionFailure(
-            "INVALID_RALLY_TILE",
-            `Destination (${a.position.x},${a.position.y}) is occupied by another Tower.`,
-          );
-        }
-        const onBlocked = ctx.world
-          .query({ all: ["blockedRegion"] })
-          .some((be) => {
-            const r = be.components.get("blockedRegion") as
-              | { x: number; y: number; w: number; h: number }
-              | undefined;
-            if (!r) return false;
-            return (
-              a.position.x >= r.x &&
-              a.position.x < r.x + r.w &&
-              a.position.y >= r.y &&
-              a.position.y < r.y + r.h
-            );
-          });
-        if (onBlocked) {
-          return actionFailure(
-            "INVALID_RALLY_TILE",
-            `Destination (${a.position.x},${a.position.y}) is inside a BlockedRegion.`,
-          );
-        }
-        const onPath = (map.paths ?? []).some((p) =>
-          pathContains(a.position, p.waypoints ?? []),
-        );
-        const placementMode = ctx.placementModes.get(map.placementMode.kind);
-        const placementOk =
-          placementMode?.validate(a.position, map, ctx.world).ok ?? false;
-        if (!onPath && !placementOk) {
-          return actionFailure(
-            "INVALID_RALLY_TILE",
-            `Destination (${a.position.x},${a.position.y}) is neither a Path tile nor a placeable tile.`,
+            RALLY_FAILURE_CODE[result.reason],
+            rallyFailureMessage(
+              result.reason,
+              a.position,
+              towerPos,
+              summon.rallyPointRange,
+            ),
           );
         }
         ctx.world.mutate(a.tower, "rallyPoint", () => ({
