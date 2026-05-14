@@ -7,7 +7,7 @@
     "doc": "docs"
   },
   "scripts": {
-    "sandcastle": "npx tsx .sandcastle/main.ts",
+    "sandcastle": "npx sandcastle docker build-image && npx tsx .sandcastle/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
