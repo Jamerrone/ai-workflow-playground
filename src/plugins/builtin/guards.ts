@@ -2,7 +2,6 @@ import { actionFailure } from "../../kernel/action-result.js";
 import {
   PHASE_ORDER,
   Phase,
-  type AttackEffectConfig,
   type AttackEffectContext,
   type AttackEffectDef,
   type AttackSelectionCandidate,
@@ -18,51 +17,22 @@ import {
   type UpgradeOpContext,
   type UpgradeOpDef,
 } from "../../types.js";
+import {
+  type AttackData,
+  matchesFilter,
+  entityTags,
+} from "./attack-shared.js";
 
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = {
   kind: "declaration-order",
 };
 
-interface AttackData {
-  readonly id: string;
-  readonly stats: { readonly range: number; readonly cooldown: number };
-  readonly effects: ReadonlyArray<AttackEffectConfig>;
-  readonly targetFilter?: {
-    readonly require?: readonly string[];
-    readonly exclude?: readonly string[];
-  };
-}
-
 interface GuardModifier {
   readonly attackId: string;
   readonly effectKind: string;
   readonly field: string;
   readonly delta: number;
-}
-
-function matchesFilter(
-  tags: readonly string[],
-  filter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] },
-): boolean {
-  if (!filter) return true;
-  if (filter.require && filter.require.length > 0) {
-    if (!filter.require.every((t) => tags.includes(t))) return false;
-  }
-  if (filter.exclude && filter.exclude.length > 0) {
-    if (filter.exclude.some((t) => tags.includes(t))) return false;
-  }
-  return true;
-}
-
-function entityTags(
-  components: ReadonlyMap<string, unknown>,
-): readonly string[] {
-  for (const name of ["enemy", "guard"]) {
-    const c = components.get(name) as { tags?: readonly string[] } | undefined;
-    if (c?.tags) return c.tags;
-  }
-  return [];
 }
 
 function applyGuardModifiers(
@@ -574,13 +544,8 @@ export const guardsPlugin: Plugin = {
           if (!enemy) continue;
           const cd = g.components.get("cooldownTimer") as { remaining: number };
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
-          if (newRemaining > 0) {
-            ctx.world.mutate(g.id, "cooldownTimer", () => ({
-              remaining: newRemaining,
-            }));
-            continue;
-          }
-          ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: 0 }));
+          ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: newRemaining }));
+          if (newRemaining > 0) continue;
 
           const parent = g.components.get("parent") as { tower: string };
           const tower = ctx.world.get(parent.tower);
@@ -612,15 +577,16 @@ export const guardsPlugin: Plugin = {
             }));
           if (eligible.length === 0) continue;
 
-          const selectionConfig: AttackSelectionStrategyConfig =
-            ((tower?.components.get("tower") &&
-              (ctx.registry.towers as Record<
+          const towerArchetypeId = tower
+            ? (tower.components.get("tower") as { archetype: string }).archetype
+            : undefined;
+          const towerDef = towerArchetypeId
+            ? (ctx.registry.towers as Record<
                 string,
                 { attackSelection?: AttackSelectionStrategyConfig } | undefined
-              >)[
-                (tower!.components.get("tower") as { archetype: string }).archetype
-              ]?.attackSelection) as AttackSelectionStrategyConfig | undefined) ??
-            DEFAULT_ATTACK_SELECTION;
+              >)[towerArchetypeId]
+            : undefined;
+          const selectionConfig = towerDef?.attackSelection ?? DEFAULT_ATTACK_SELECTION;
           const selectionDef = ctx.attackSelectionStrategies.get(selectionConfig.kind);
           if (!selectionDef) continue;
           const chosen = selectionDef.select({
