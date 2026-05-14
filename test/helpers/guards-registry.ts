@@ -1,13 +1,19 @@
 import type { ConfigRegistry } from "../../src/index.js";
 
-export function buildTracerRegistry(): ConfigRegistry {
+/**
+ * Minimal registry for the Guards plugin tracer-bullet: a Barracks Tower
+ * archetype carrying a `summon` Component config, plus a `footman` Guard
+ * archetype. No waves, no enemies — just enough to exercise placement and
+ * the immediate-fill spawn behaviour.
+ */
+export function buildGuardsRegistry(): ConfigRegistry {
   return {
     components: {},
     entityKinds: {},
     maps: {
-      "tracer-map": {
+      "guards-map": {
         width: 5,
-        height: 1,
+        height: 5,
         paths: [
           {
             id: "p1",
@@ -19,42 +25,37 @@ export function buildTracerRegistry(): ConfigRegistry {
           },
         ],
         bases: [{ id: "b1", position: { x: 4, y: 0 } }],
-        towerSlots: [{ x: 2, y: 0 }],
+        towerSlots: [{ x: 2, y: 2 }],
         placementMode: { kind: "fixed" },
       },
     },
     towers: {
-      archer: {
+      barracks: {
         cost: 50,
         targeting: { kind: "closest-to-base" },
-        attacks: [
-          {
-            id: "shot",
-            stats: { range: 3, cooldown: 0.5 },
-            targetFilter: { require: [], exclude: [] },
-            effects: [{ kind: "damage", stats: { amount: 10 } }],
+        attacks: [],
+        components: {
+          summon: {
+            summons: "footman",
+            maxCount: 3,
+            respawnCooldown: 5,
+            rallyPointRange: 4,
           },
-        ],
+        },
       },
     },
-    enemies: {
-      grunt: {
-        tags: ["ground"],
-        stats: { hp: 10, speed: 1, baseDamage: 1 },
-        killReward: 10,
+    enemies: {},
+    guards: {
+      footman: {
+        stats: { hp: 20, speed: 1, idleRegen: 1 },
+        attacks: [],
       },
     },
-    waves: {
-      "w1": {
-        groups: [
-          { id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 },
-        ],
-      },
-    },
+    waves: {},
     scenarios: {
-      tracer: {
-        map: "tracer-map",
-        waves: [{ id: "w1", pathBindings: { g1: "p1" } }],
+      guardsScenario: {
+        map: "guards-map",
+        waves: [],
         waveTrigger: { kind: "manual" },
         gameRuleOverrides: {
           globalBaseHealth: 10,
@@ -65,6 +66,5 @@ export function buildTracerRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
-    guards: {},
   };
 }

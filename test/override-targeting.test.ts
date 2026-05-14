@@ -231,6 +231,7 @@ describe("Slice 11: multi-path Scenarios", () => {
       upgrades: {},
       difficulties: {},
       gameRules: {},
+    guards: {},
     };
   }
 
@@ -364,6 +365,7 @@ describe("Slice 11: tag-vocabulary consistency", () => {
       upgrades: {},
       difficulties: {},
       gameRules: {},
+    guards: {},
     };
     // Sanity: registry validates (path binding tag consistency is enforced
     // because each enemy has the required tag for its bound path).

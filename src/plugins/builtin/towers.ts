@@ -23,6 +23,7 @@ interface TowerArchetype {
     readonly stats: { readonly range: number; readonly cooldown: number };
     readonly effects: ReadonlyArray<{ readonly kind: string; readonly stats?: { readonly amount?: number } }>;
   }>;
+  readonly components?: Readonly<Record<string, unknown>>;
 }
 
 interface UpgradeArchetype {
@@ -132,7 +133,11 @@ export const towersPlugin: Plugin = {
         const entityId = `tower:${a.tower}:${a.position.x},${a.position.y}`;
         const initialTargeting: TargetingStrategyConfig =
           towerDef.targeting ?? towerDef.strategy ?? { kind: "closest-to-base" };
+        const archetypeComponents = towerDef.components
+          ? structuredClone(towerDef.components as Record<string, unknown>)
+          : {};
         ctx.world.spawn(entityId, {
+          ...archetypeComponents,
           tower: { archetype: a.tower },
           position: { x: a.position.x, y: a.position.y },
           cooldownTimer: { remaining: 0 },

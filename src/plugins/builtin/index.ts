@@ -11,12 +11,14 @@ import { attackSelectionStrategiesPlugin } from "./attack-selection-strategies.j
 import { upgradesPlugin } from "./upgrades.js";
 import { winLossPlugin } from "./win-loss.js";
 import { mapFeaturesPlugin } from "./map-features.js";
+import { guardsPlugin } from "./guards/index.js";
 
 export {
   attackEffectsPlugin,
   attackSelectionStrategiesPlugin,
   combatPlugin,
   enemiesPlugin,
+  guardsPlugin,
   mapFeaturesPlugin,
   movementPlugin,
   projectilesPlugin,
@@ -40,4 +42,5 @@ export const builtInBundle: readonly Plugin[] = [
   combatPlugin,
   upgradesPlugin,
   winLossPlugin,
+  guardsPlugin,
 ];

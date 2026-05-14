@@ -100,5 +100,6 @@ export function buildUpgradesRegistry(): ConfigRegistry {
     },
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }

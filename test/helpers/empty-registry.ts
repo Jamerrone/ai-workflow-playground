@@ -12,5 +12,6 @@ export function emptyRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }

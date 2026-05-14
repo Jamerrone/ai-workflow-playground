@@ -66,5 +66,6 @@ export function buildEffectsRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }

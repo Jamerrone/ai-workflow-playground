@@ -66,6 +66,7 @@ function buildMultiWaveRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }
 
@@ -151,6 +152,7 @@ function buildTwoPathRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }
 

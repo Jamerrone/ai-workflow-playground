@@ -72,6 +72,7 @@ function buildTriggerRegistry(waveTrigger: { kind: string; cooldown?: number }):
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }
 

@@ -32,6 +32,7 @@ export interface LoaderInput {
   readonly upgrades?: Record<string, unknown>;
   readonly difficulties?: Record<string, unknown>;
   readonly gameRules?: Record<string, unknown>;
+  readonly guards?: Record<string, unknown>;
 }
 
 export interface PluginManifestEntry {
@@ -64,5 +65,6 @@ export const BUCKETS = [
   "upgrades",
   "difficulties",
   "gameRules",
+  "guards",
 ] as const;
 export type Bucket = (typeof BUCKETS)[number];

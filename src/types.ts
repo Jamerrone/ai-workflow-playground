@@ -9,6 +9,7 @@ export interface ConfigRegistry {
   upgrades: Record<string, unknown>;
   difficulties: Record<string, unknown>;
   gameRules: Record<string, unknown>;
+  guards: Record<string, unknown>;
 }
 
 export const Phase = {

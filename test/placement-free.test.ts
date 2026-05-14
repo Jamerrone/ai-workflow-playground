@@ -71,6 +71,7 @@ function buildFreePlacementRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }
 

@@ -111,6 +111,7 @@ function buildAerialRegistry(): ConfigRegistry {
     upgrades: {},
     difficulties: {},
     gameRules: {},
+    guards: {},
   };
 }
 
