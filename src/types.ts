@@ -143,7 +143,18 @@ export interface ActionContext {
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly attackSelectionStrategies: ReadonlyMap<string, AttackSelectionStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
+  readonly gameRules: ReadonlyMap<string, unknown>;
   emit(event: GameEvent): void;
+}
+
+export type GameRuleValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+export interface GameRuleDef<T = unknown> {
+  readonly key: string;
+  readonly default: T;
+  validate?(value: unknown): GameRuleValidationResult;
 }
 
 export interface TargetingStrategyConfig {
@@ -318,6 +329,7 @@ export interface SystemContext {
   readonly targetingStrategies: ReadonlyMap<string, TargetingStrategyDef>;
   readonly attackSelectionStrategies: ReadonlyMap<string, AttackSelectionStrategyDef>;
   readonly upgradeOps: ReadonlyMap<string, UpgradeOpDef>;
+  readonly gameRules: ReadonlyMap<string, unknown>;
   emit(event: GameEvent): void;
 }
 
@@ -356,6 +368,7 @@ export interface RegistrationApi {
   registerTargetingStrategy(def: TargetingStrategyDef): void;
   registerAttackSelectionStrategy(def: AttackSelectionStrategyDef): void;
   registerUpgradeOp(def: UpgradeOpDef): void;
+  registerGameRule<T = unknown>(def: GameRuleDef<T>): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }
 

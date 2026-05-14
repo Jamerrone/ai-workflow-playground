@@ -17,6 +17,7 @@ import {
   type EngineOptions,
   type EventHandler,
   type GameEvent,
+  type GameRuleDef,
   type MapFeatureDef,
   type Phase,
   type PlacementModeDef,
@@ -47,6 +48,7 @@ interface Registries {
   targetingStrategies: Map<string, TargetingStrategyDef>;
   attackSelectionStrategies: Map<string, AttackSelectionStrategyDef>;
   upgradeOps: Map<string, UpgradeOpDef>;
+  gameRules: Map<string, GameRuleDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
 }
 
@@ -64,6 +66,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const targetingStrategies = new Map<string, TargetingStrategyDef>();
   const attackSelectionStrategies = new Map<string, AttackSelectionStrategyDef>();
   const upgradeOps = new Map<string, UpgradeOpDef>();
+  const gameRules = new Map<string, GameRuleDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
 
   const api: RegistrationApi = {
@@ -105,6 +108,9 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerUpgradeOp(def) {
       upgradeOps.set(def.kind, def);
     },
+    registerGameRule(def) {
+      gameRules.set(def.key, def as GameRuleDef);
+    },
     onScenarioLoad(hook) {
       scenarioLoadHooks.push(hook);
     },
@@ -137,8 +143,23 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     targetingStrategies,
     attackSelectionStrategies,
     upgradeOps,
+    gameRules,
     scenarioLoadHooks,
   };
+}
+
+function resolveGameRules(
+  defs: ReadonlyMap<string, GameRuleDef>,
+  scenarioOverrides: Readonly<Record<string, unknown>> | undefined,
+): ReadonlyMap<string, unknown> {
+  const out = new Map<string, unknown>();
+  for (const [key, def] of defs) out.set(key, def.default);
+  if (scenarioOverrides) {
+    for (const [key, value] of Object.entries(scenarioOverrides)) {
+      out.set(key, value);
+    }
+  }
+  return out;
 }
 
 export function createEngine(
@@ -157,8 +178,10 @@ export function createEngine(
     targetingStrategies,
     attackSelectionStrategies,
     upgradeOps,
+    gameRules: gameRuleDefs,
     scenarioLoadHooks,
   } = loadPlugins(options.plugins);
+  let resolvedGameRules: ReadonlyMap<string, unknown> = resolveGameRules(gameRuleDefs, undefined);
   for (const phase of PHASE_ORDER) {
     systemsByPhase.set(phase, resolveSystemOrder(systemsByPhase.get(phase)!));
   }
@@ -221,6 +244,7 @@ export function createEngine(
     targetingStrategies,
     attackSelectionStrategies,
     upgradeOps,
+    gameRules: resolvedGameRules,
     emit(event: GameEvent) {
       // Action-produced events fire synchronously, before dispatch returns (ADR-0016).
       // Queue for the post-handler flush so reward handlers run on action-emitted events.
@@ -264,6 +288,7 @@ export function createEngine(
         targetingStrategies,
         attackSelectionStrategies,
         upgradeOps,
+        gameRules: resolvedGameRules,
         emit(event: GameEvent) {
           pending.push(event);
         },
@@ -323,6 +348,8 @@ export function createEngine(
       tickHistory = [];
       actionHistory = [];
       world.reset();
+      const overrides = (scenario as { gameRuleOverrides?: Record<string, unknown> }).gameRuleOverrides;
+      resolvedGameRules = resolveGameRules(gameRuleDefs, overrides);
       // Plugins set up their per-Scenario state. Kernel ships no gameplay.
       const ctx = buildActionContext();
       for (const hook of scenarioLoadHooks) hook(ctx);

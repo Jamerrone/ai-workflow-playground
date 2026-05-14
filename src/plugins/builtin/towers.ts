@@ -29,10 +29,6 @@ interface UpgradeArchetype {
   readonly cost?: number;
 }
 
-interface ScenarioGameRules {
-  readonly defaultSellRefundPercent?: number;
-}
-
 const DEFAULT_SELL_REFUND_PERCENT = 0.7;
 const TOWERS_STATE_ENTITY = "towers/state";
 
@@ -68,6 +64,12 @@ export const towersPlugin: Plugin = {
       ],
     });
 
+    api.registerGameRule({ key: "startingGold", default: 0 });
+    api.registerGameRule({
+      key: "defaultSellRefundPercent",
+      default: DEFAULT_SELL_REFUND_PERCENT,
+    });
+
     // Built-in PlacementMode: fixed. Placement is legal only on a pre-declared TowerSlot.
     api.registerPlacementMode({
       kind: "fixed",
@@ -83,8 +85,7 @@ export const towersPlugin: Plugin = {
     // Scenario state: gold (initial value from startingGold GameRule override)
     // and the set of sold tower ids.
     api.onScenarioLoad((ctx: ActionContext) => {
-      const scenario = (ctx.registry.scenarios as Record<string, { gameRuleOverrides?: { startingGold?: number } }>)[ctx.scenarioId];
-      const startingGold = scenario?.gameRuleOverrides?.startingGold ?? 0;
+      const startingGold = ctx.gameRules.get("startingGold") as number;
       ctx.world.spawn(TOWERS_STATE_ENTITY, {
         gold: { amount: startingGold },
         soldTowers: { ids: [] as string[] },
@@ -192,9 +193,7 @@ export const towersPlugin: Plugin = {
           (sum, id) => sum + (upgrades[id]?.cost ?? 0),
           0,
         );
-        const scenario = (ctx.registry.scenarios as Record<string, { gameRuleOverrides?: ScenarioGameRules }>)[ctx.scenarioId];
-        const refundPercent =
-          scenario?.gameRuleOverrides?.defaultSellRefundPercent ?? DEFAULT_SELL_REFUND_PERCENT;
+        const refundPercent = ctx.gameRules.get("defaultSellRefundPercent") as number;
         // Nudge by a tiny epsilon so float-noise products like 90 * 0.7 = 62.9999…
         // don't floor down a whole gold piece below the documented refund.
         const refund = Math.floor((archetype.cost + upgradeCosts) * refundPercent + 1e-9);
