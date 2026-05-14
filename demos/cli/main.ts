@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createEngine,
@@ -41,9 +41,8 @@ export interface DemoOutcome {
 const DEFAULT_DATA_DIR = resolve(fileURLToPath(import.meta.url), "..", "..", "shared-data");
 
 export function runDemo(options: DemoOptions): DemoOutcome {
-  const dataDir = options.dataDir;
+  const { dataDir, snapshotDir, out } = options;
   const transcriptPath = options.transcriptPath ?? join(dataDir, "transcript.json");
-  const snapshotDir = options.snapshotDir;
 
   // Loader path: walk the shared-data directory (exercises the real on-disk
   // loader path, not the in-memory shortcut).
@@ -69,7 +68,7 @@ export function runDemo(options: DemoOptions): DemoOutcome {
   let lost = false;
   engine.onEvent((e) => {
     eventCount++;
-    options.out?.write(formatEvent(e) + "\n");
+    out?.write(formatEvent(e) + "\n");
     if (e.kind === "scenarioWon") won = true;
     if (e.kind === "scenarioLost") lost = true;
   });
@@ -108,9 +107,8 @@ export function runDemo(options: DemoOptions): DemoOutcome {
     if (won || lost) break;
   }
 
-  const tickIndex = snapshotCount;
   engine.dispose();
-  return { won, lost, tickIndex, eventCount, snapshotCount };
+  return { won, lost, tickIndex: snapshotCount, eventCount, snapshotCount };
 }
 
 function formatEvent(e: GameEvent): string {
@@ -126,7 +124,7 @@ function formatEvent(e: GameEvent): string {
 }
 
 function ensureAbsolute(path: string): string {
-  return path.startsWith("/") ? path : resolve(process.cwd(), path);
+  return isAbsolute(path) ? path : resolve(process.cwd(), path);
 }
 
 function isMainModule(): boolean {
@@ -148,8 +146,11 @@ if (isMainModule()) {
     snapshotDir,
     out: { write: (line) => process.stdout.write(line) },
   });
+  let status = "stalled";
+  if (outcome.won) status = "won";
+  else if (outcome.lost) status = "lost";
   process.stdout.write(
-    `\nScenario ${outcome.won ? "won" : outcome.lost ? "lost" : "stalled"} ` +
+    `\nScenario ${status} ` +
       `after ${outcome.tickIndex} tick(s); ${outcome.eventCount} events; ` +
       `${outcome.snapshotCount} snapshot file(s) written to ${snapshotDir}\n`,
   );
