@@ -2,6 +2,8 @@ import { actionFailure } from "../../kernel/action-result.js";
 import {
   PHASE_ORDER,
   Phase,
+  type AttackEffectContext,
+  type AttackEffectDef,
   type GameEvent,
   type MoveRallyPointAction,
   type Plugin,
@@ -59,6 +61,42 @@ export const guardsPlugin: Plugin = {
     api.registerComponent({ name: "engagement", writableIn: PHASE_ORDER });
 
     api.registerGameRule({ key: "enemyEngagementCap", default: 3 });
+
+    const healEffect: AttackEffectDef = {
+      kind: "heal",
+      validate(effect) {
+        const e = effect as { stats?: { amount?: unknown } };
+        if (typeof e.stats?.amount !== "number" || e.stats.amount <= 0) {
+          return { ok: false, reason: "stats.amount must be a positive number" };
+        }
+        return { ok: true };
+      },
+      apply(ctx: AttackEffectContext) {
+        const amount = (ctx.effect.stats as { amount: number }).amount;
+        for (const id of ctx.state.targets) {
+          const target = ctx.world.get(id);
+          const h = target?.components.get("health") as
+            | { hp: number; max: number }
+            | undefined;
+          if (!h) continue;
+          const delta = Math.min(amount, h.max - h.hp);
+          if (delta <= 0) continue;
+          const next = h.hp + delta;
+          ctx.world.mutate(id, "health", () => ({ ...h, hp: next }));
+          ctx.emit({
+            kind: "entityHealed",
+            tick: ctx.tickIndex,
+            entity: id,
+            delta,
+            hp: next,
+            source: ctx.fire.source.id,
+            attackId: ctx.fire.attack.id,
+            effectId: ctx.effect.id,
+          });
+        }
+      },
+    };
+    api.registerAttackEffect(healEffect);
 
     api.registerEntityKind({
       kind: "guard",
