@@ -240,7 +240,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // -----------------------------------------------------------------------
     const implement = await sandbox.run({
       name: "implementer",
-      maxIterations: 1,
+      maxIterations: 100,
       agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/implement-prompt.md",
       promptArgs: { SKIP_ISSUE_IDS: skipList },
