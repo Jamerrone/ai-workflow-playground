@@ -1,35 +1,20 @@
-# Context
-
-## Open issues
-
-!`gh issue list --state open --label ready-for-agent --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`
-
-## Recent RALPH commits (last 10)
-
-!`git log --oneline --grep="RALPH" -10`
-
-## Issues with open PRs (DO NOT pick these)
-
-The following issue IDs already have an open Sandcastle pull request awaiting human review. **Do not pick them — pick a different issue:** {{SKIP_ISSUE_IDS}}
-
 # Task
 
-You are RALPH — an autonomous coding agent working through issues one at a time.
+Fix issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}
 
-## Priority order
+Pull in the issue using `gh issue view`, with comments. If it has a parent PRD, pull that in too.
 
-Work on issues in this order:
+Only work on the issue specified.
 
-1. **Bug fixes** — broken behaviour affecting users
-2. **Tracer bullets** — thin end-to-end slices that prove an approach works
-3. **Polish** — improving existing functionality (error messages, UX, docs)
-4. **Refactors** — internal cleanups with no user-visible change
+# Context
 
-Pick the highest-priority open issue that is not blocked by another open issue **and is not in the skip list above**.
+Here are the last 10 commits:
 
-## Workflow
+!`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
 
-1. **Explore** — read the issue carefully. Pull in the parent PRD if referenced. Read the relevant source files and tests before writing any code.
+# Workflow
+
+1. **Explore** — read the issue carefully. Read the relevant source files and tests before writing any code.
 2. **Plan** — decide what to change and why. Keep the change as small as possible.
 3. **Execute** — use RGR (Red → Green → Repeat → Refactor): write a failing test first, then write the implementation to pass it.
 4. **Verify** — run `npm run typecheck` and `npm run test` before committing. Fix any failures before proceeding.
@@ -40,22 +25,15 @@ Pick the highest-priority open issue that is not blocked by another open issue *
    - List files changed
    - Note any blockers for the next iteration
 
-## Rules
+# Rules
 
-- Work on **one issue per iteration**. Do not attempt multiple issues in a single iteration.
-- **Do NOT close the issue.** The host will open a Pull Request whose body includes `Closes #<id>`; the issue closes automatically when the PR is merged.
+- **Do NOT close the issue.** The host opens a PR whose body includes `Closes #{{ISSUE_NUMBER}}`; the issue closes automatically when the PR is merged.
 - **Do NOT run `gh issue close`, `git push`, `git checkout`, or `gh pr create`.** The host handles all branch and PR operations.
 - Do not leave commented-out code or TODO comments in committed code.
 - If you are blocked (missing context, failing tests you cannot fix, external dependency), commit what you have with a clear blocker note in the commit message — the reviewer and PR will surface the situation.
 
 # Done
 
-After committing, tell the host which issue you worked on by emitting the ID inside the tags below. The host parses this from your output to push the branch and open a PR.
-
-<issue-id>N</issue-id>
-
-(Replace `N` with the actual issue number. Just the number, no `#`.)
-
-Then output the completion signal:
+Once your commit is made, output the completion signal:
 
 <promise>COMPLETE</promise>

@@ -1,20 +1,24 @@
-// Sequential Reviewer (PR mode) — implement → review → PR loop
+// Sequential Reviewer (PR mode) — plan → implement → review → PR loop
 //
 // This template drives a multi-phase workflow per issue:
-//   Phase 1 (Implement):    An agent picks an open issue, works on it
-//                           on a dedicated branch, commits the changes, and
-//                           signals completion.
-//   Phase 2 (Review):       A second agent reviews the branch diff and either
+//   Phase 1 (Plan):         The planner reads the open issues, applies the
+//                           priority order + blocking rules, and returns the
+//                           single best issue to work on.
+//   Phase 2 (Implement):    The implementer works the picked issue on a
+//                           dedicated branch, commits the changes, and signals
+//                           completion.
+//   Phase 3 (Review):       The reviewer inspects the branch diff and either
 //                           approves it or makes corrections directly on the
 //                           branch.
-//   Phase 3 (Push):         The host pushes the local branch to a clean
+//   Phase 4 (Push):         The host pushes the local branch to a clean
 //                           `sandcastle/issue-<id>-<slug>` remote name.
-//   Phase 4 (PR author):    A third agent reads the diff and emits a
+//   Phase 5 (PR author):    The PR author reads the diff and emits a
 //                           structured PR title and body.
-//   Phase 5 (gh pr create): The host opens the pull request.
+//   Phase 6 (gh pr create): The host opens the pull request.
 //
-// All agent phases share a single sandbox created via createSandbox(), so the
-// implementer, reviewer, and PR author work on the same explicit branch.
+// The implementer, reviewer, and PR author share a single sandbox created via
+// createSandbox(), so all three work on the same explicit branch. The planner
+// runs in its own ephemeral sandbox since it only reads issues.
 //
 // The outer loop repeats up to MAX_ITERATIONS times, processing one issue per
 // iteration. Merging a PR auto-closes its issue via the `Closes #N` line in
@@ -139,7 +143,7 @@ const checkExistingPr = (
 };
 
 // Returns the set of issue IDs that currently have an open Sandcastle PR.
-// The implementer prompt is told to skip these so the agent picks something new.
+// The planner is told to skip these so it picks something new.
 const listIssueIdsWithOpenPrs = (): Set<string> => {
   try {
     const raw = execSync(
@@ -160,20 +164,6 @@ const listIssueIdsWithOpenPrs = (): Set<string> => {
   }
 };
 
-const fetchIssueTitle = (issueId: string): string | null => {
-  try {
-    return execSync(
-      `gh issue view ${shellEscape(issueId)} --json title -q .title`,
-      { encoding: "utf8" },
-    ).trim();
-  } catch (err) {
-    console.error(
-      `  ✗ Could not fetch title for issue ${issueId}: ${(err as Error).message ?? "unknown error"}`,
-    );
-    return null;
-  }
-};
-
 const countEligibleIssues = (skipIds: Set<string>): number => {
   try {
     const raw = execSync(
@@ -184,7 +174,7 @@ const countEligibleIssues = (skipIds: Set<string>): number => {
     return issues.filter((i) => !skipIds.has(String(i.number))).length;
   } catch {
     // If gh fails, optimistically assume there's work to do and let the
-    // implementer surface the real error.
+    // planner surface the real error.
     return 1;
   }
 };
@@ -202,8 +192,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const skipList =
     skipIssueIds.size > 0 ? Array.from(skipIssueIds).join(", ") : "(none)";
 
-  // Bail early if there's nothing to work on — saves spinning up a sandbox
-  // just to have the implementer report an empty backlog.
+  // Bail early if there's nothing to work on — saves spinning up the planner
+  // sandbox just to discover an empty backlog.
   if (countEligibleIssues(skipIssueIds) === 0) {
     console.log(
       "No eligible open issues (every ready-for-agent issue already has an open Sandcastle PR, or the backlog is empty). Exiting.",
@@ -211,16 +201,70 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     break;
   }
 
-  // Generate a unique temporary branch name for this iteration. After we know
-  // which issue the agent picked, we push to a clean
-  // `sandcastle/issue-<id>-<slug>` remote name (see Phase 3).
-  const tempBranch = `sandcastle/sequential-reviewer/${Date.now()}`;
+  // -------------------------------------------------------------------------
+  // Phase 1: Plan
+  //
+  // The planner reads the open issues, applies the priority rules + skip
+  // list, and returns the single best issue inside a <plan> tag.
+  // -------------------------------------------------------------------------
+  const plan = await sandcastle.run({
+    hooks,
+    sandbox: docker(),
+    name: "planner",
+    maxIterations: 1,
+    agent: sandcastle.claudeCode("claude-opus-4-7"),
+    promptFile: "./.sandcastle/plan-prompt.md",
+    promptArgs: { SKIP_ISSUE_IDS: skipList },
+  });
+
+  const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
+  if (!planMatch) {
+    console.warn("Planner did not emit a <plan> tag. Skipping iteration.");
+    continue;
+  }
+  const picked = JSON.parse(planMatch[1]!) as {
+    number?: string;
+    title?: string;
+  };
+  if (!picked.number || !picked.title) {
+    console.log("Planner returned no eligible issue. Exiting.");
+    break;
+  }
+  const issueNumber = picked.number;
+  const issueTitle = picked.title;
+  console.log(`Planner picked issue ${issueNumber}: ${issueTitle}`);
+
+  // The branch name is deterministic from the issue, so the implementer,
+  // reviewer, and push all share the same branch.
+  const branch = `sandcastle/issue-${issueNumber}-${slugify(issueTitle)}`;
+
+  // Defensive: the planner skips issues whose IDs are in the open-PR list,
+  // but a PR could have been merged or closed without auto-closing the
+  // issue. Skip those before paying the cost of a sandbox.
+  const existing = checkExistingPr(branch);
+  if (existing.state === "MERGED") {
+    console.warn(
+      `  ⚠ ${issueNumber}: PR ${existing.url} already merged — skipping.`,
+    );
+    continue;
+  }
+  if (existing.state === "CLOSED") {
+    console.warn(`  ⚠ ${issueNumber}: PR ${existing.url} closed — skipping.`);
+    continue;
+  }
+  if (existing.state === "OPEN") {
+    // Race: PR was opened between the planner's skip-list query and now.
+    console.warn(
+      `  ⚠ ${issueNumber}: PR ${existing.url} already open — skipping.`,
+    );
+    continue;
+  }
 
   // Create a single sandbox that the implementer, reviewer, and PR author
   // share. This gives all three agents a real, named branch that persists
   // across phases.
   const sandbox = await sandcastle.createSandbox({
-    branch: tempBranch,
+    branch,
     sandbox: docker(),
     hooks,
     copyToWorktree,
@@ -228,51 +272,34 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   try {
     // -----------------------------------------------------------------------
-    // Phase 1: Implement
+    // Phase 2: Implement
     //
-    // An agent picks the next open issue (skipping any whose IDs are in
-    // SKIP_ISSUE_IDS), writes the implementation (using RGR: Red → Green →
-    // Repeat → Refactor), and commits the result. It also emits
-    // <issue-id>N</issue-id> so the host knows which issue to push for and
-    // open a PR against.
-    //
-    // The agent signals completion via <promise>COMPLETE</promise> when done.
+    // The implementer works the issue selected by the planner and commits
+    // the result.
     // -----------------------------------------------------------------------
     const implement = await sandbox.run({
       name: "implementer",
       maxIterations: 100,
-      agent: sandcastle.claudeCode("claude-opus-4-7"),
+      agent: sandcastle.claudeCode("claude-sonnet-4-6"),
       promptFile: "./.sandcastle/implement-prompt.md",
-      promptArgs: { SKIP_ISSUE_IDS: skipList },
+      promptArgs: { ISSUE_NUMBER: issueNumber, ISSUE_TITLE: issueTitle },
     });
 
     if (!implement.commits.length) {
-      console.log("Implementation agent made no commits. Skipping review and PR.");
-      continue;
-    }
-
-    const idMatch = implement.stdout.match(/<issue-id>(\d+)<\/issue-id>/);
-    if (!idMatch) {
-      console.error(
-        "Implementation agent did not emit <issue-id>N</issue-id>. Skipping review and PR.",
+      console.log(
+        "Implementation agent made no commits. Skipping review and PR.",
       );
       continue;
     }
-    const issueId = idMatch[1]!;
 
-    const issueTitle = fetchIssueTitle(issueId);
-    if (!issueTitle) {
-      continue;
-    }
-
-    console.log(`\nImplementation complete on branch: ${tempBranch}`);
-    console.log(`Issue ${issueId}: ${issueTitle}`);
+    console.log(`\nImplementation complete on branch: ${branch}`);
+    console.log(`Issue ${issueNumber}: ${issueTitle}`);
     console.log(`Commits: ${implement.commits.length}`);
 
     // -----------------------------------------------------------------------
-    // Phase 2: Review
+    // Phase 3: Review
     //
-    // A second agent reviews the diff of the branch produced by Phase 1.
+    // The reviewer inspects the diff of the branch produced by Phase 2.
     // {{SOURCE_BRANCH}} and {{TARGET_BRANCH}} are built-in prompt args
     // auto-populated by sandcastle, so the reviewer inspects the right branch
     // and either approves or makes corrections directly on the branch.
@@ -287,52 +314,30 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     console.log("\nReview complete.");
 
     // -----------------------------------------------------------------------
-    // Phase 3: Push
+    // Phase 4: Push
     //
-    // Push the local temp branch to a clean `sandcastle/issue-<id>-<slug>`
-    // remote name. If a PR already exists for this remote branch and is
-    // open, the push alone updates it — we skip phases 4 and 5. If the PR
-    // was merged or closed, we skip pushing entirely (no force-push).
+    // Push the branch to its remote of the same name. No force-push: if the
+    // remote rejects (e.g. a stale ref ahead of our local), surface the
+    // error and skip rather than overwrite work.
     // -----------------------------------------------------------------------
-    const remoteBranch = `sandcastle/issue-${issueId}-${slugify(issueTitle)}`;
-    const existing = checkExistingPr(remoteBranch);
-    if (existing.state === "MERGED") {
-      console.warn(
-        `  ⚠ ${issueId}: PR ${existing.url} already merged — skipping.`,
-      );
-      continue;
-    }
-    if (existing.state === "CLOSED") {
-      console.warn(
-        `  ⚠ ${issueId}: PR ${existing.url} closed — skipping.`,
-      );
-      continue;
-    }
-
     try {
-      const refspec = `${tempBranch}:refs/heads/${remoteBranch}`;
-      execSync(`git push origin ${shellEscape(refspec)}`, {
+      execSync(`git push -u origin ${shellEscape(branch)}`, {
         stdio: ["ignore", "pipe", "pipe"],
       });
     } catch (err) {
       const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? "";
       console.error(
-        `  ✗ ${issueId}: push failed — skipping (no force-push).\n${stderr}`,
+        `  ✗ ${issueNumber}: push failed — skipping (no force-push).\n${stderr}`,
       );
       continue;
     }
 
-    if (existing.state === "OPEN" && existing.url) {
-      console.log(`  ↻ ${issueId}: updated existing PR ${existing.url}`);
-      continue;
-    }
-
     // -----------------------------------------------------------------------
-    // Phase 4: PR author
+    // Phase 5: PR author
     //
-    // A short-lived agent reads the branch diff and emits a structured
-    // <pr-title> + <pr-body>. The host parses these tags and uses them to
-    // open the PR in Phase 5. The agent never runs `gh` or `git push`.
+    // The PR author reads the branch diff and emits a structured
+    // <pr-title> + <pr-body>. The host parses these and opens the PR in
+    // Phase 6.
     // -----------------------------------------------------------------------
     const prAuthor = await sandbox.run({
       name: "pr-author",
@@ -340,22 +345,19 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       agent: sandcastle.claudeCode("claude-sonnet-4-6"),
       promptFile: "./.sandcastle/pr-prompt.md",
       promptArgs: {
-        TASK_ID: issueId,
+        ISSUE_NUMBER: issueNumber,
         ISSUE_TITLE: issueTitle,
-        ISSUE_ID: issueId,
-        CLOSES_LINE: `Closes #${issueId}\n\n`,
+        CLOSES_LINE: `Closes #${issueNumber}\n\n`,
       },
     });
 
     const prTitleMatch = prAuthor.stdout.match(
       /<pr-title>([\s\S]*?)<\/pr-title>/,
     );
-    const prBodyMatch = prAuthor.stdout.match(
-      /<pr-body>([\s\S]*?)<\/pr-body>/,
-    );
+    const prBodyMatch = prAuthor.stdout.match(/<pr-body>([\s\S]*?)<\/pr-body>/);
     if (!prTitleMatch || !prBodyMatch) {
       console.error(
-        `  ✗ ${issueId}: pr-author did not emit <pr-title> + <pr-body>. PR not created (branch is pushed though).`,
+        `  ✗ ${issueNumber}: pr-author did not emit <pr-title> + <pr-body>. PR not created (branch is pushed though).`,
       );
       continue;
     }
@@ -363,7 +365,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     const prBody = prBodyMatch[1]!.trim();
 
     // -----------------------------------------------------------------------
-    // Phase 5: gh pr create
+    // Phase 6: gh pr create
     //
     // The host runs `gh pr create` with the agent-authored title and body.
     // All args are shell-escaped to avoid injection issues.
@@ -371,14 +373,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     try {
       const cmd =
         `gh pr create --base ${shellEscape(defaultBranch)} ` +
-        `--head ${shellEscape(remoteBranch)} ` +
+        `--head ${shellEscape(branch)} ` +
         `--title ${shellEscape(prTitle)} ` +
         `--body ${shellEscape(prBody)}`;
       const url = execSync(cmd, { encoding: "utf8" }).trim();
-      console.log(`  ✓ ${issueId}: opened ${url}`);
+      console.log(`  ✓ ${issueNumber}: opened ${url}`);
     } catch (err) {
       const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? "";
-      console.error(`  ✗ ${issueId}: gh pr create failed.\n${stderr}`);
+      console.error(`  ✗ ${issueNumber}: gh pr create failed.\n${stderr}`);
     }
   } finally {
     await sandbox.close();
