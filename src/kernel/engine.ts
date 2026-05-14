@@ -8,6 +8,7 @@ import {
   type ActionContext,
   type ActionHandlerDef,
   type ActionResult,
+  type AttackEffectConfig,
   type AttackEffectDef,
   type AttackSelectionStrategyDef,
   type ComponentDef,
@@ -16,6 +17,7 @@ import {
   type EntityKindDef,
   type EngineOptions,
   type EventHandler,
+  type FireAttackRequest,
   type GameEvent,
   type GameRuleDef,
   type MapFeatureDef,
@@ -35,6 +37,24 @@ import {
   type TargetingStrategyDef,
   type UpgradeOpDef,
 } from "../types.js";
+
+// Convention: the attack-effects plugin owns the `pendingFires` queue Component
+// on entity `attack-effects/pending`. The kernel writes to that Component via
+// `ctx.fireAttack` so plugins do not need to cross-import a firing helper.
+const PENDING_FIRES_ENTITY = "attack-effects/pending";
+const PENDING_FIRES_COMPONENT = "pendingFires";
+const COOLDOWN_TIMER_COMPONENT = "cooldownTimer";
+
+interface QueuedFire {
+  source: { id: string; position: Position };
+  primaryTarget: { id: string; position: Position };
+  attack: {
+    id: string;
+    stats: Record<string, unknown>;
+    targetFilter?: { require?: readonly string[]; exclude?: readonly string[] };
+  };
+  effects: ReadonlyArray<AttackEffectConfig>;
+}
 
 interface Registries {
   components: Map<string, ComponentDef>;
@@ -275,6 +295,48 @@ export function createEngine(
   return {
     tick(dt: number) {
       assertAlive();
+      const fireAttack = (req: FireAttackRequest): boolean => {
+        const attacker = world.get(req.attacker);
+        if (!attacker) return false;
+        const cd = attacker.components.get(COOLDOWN_TIMER_COMPONENT) as
+          | { remaining: number }
+          | undefined;
+        if (cd && cd.remaining > 0) return false;
+        const target = world.get(req.primaryTarget);
+        if (!target) return false;
+        const attackerPos = attacker.components.get("position") as Position | undefined;
+        const targetPos = target.components.get("position") as Position | undefined;
+        if (!attackerPos || !targetPos) return false;
+        const pendingState = world.get(PENDING_FIRES_ENTITY);
+        if (!pendingState) return false;
+        const existing =
+          (pendingState.components.get(PENDING_FIRES_COMPONENT) as
+            | { queue: QueuedFire[] }
+            | undefined)?.queue ?? [];
+        const fire: QueuedFire = {
+          source: { id: req.attacker, position: { ...attackerPos } },
+          primaryTarget: { id: req.primaryTarget, position: { ...targetPos } },
+          attack: {
+            id: req.attack.id,
+            stats: { ...req.attack.stats },
+            ...(req.attack.targetFilter !== undefined
+              ? { targetFilter: req.attack.targetFilter }
+              : {}),
+          },
+          effects: req.attack.effects,
+        };
+        world.mutate(PENDING_FIRES_ENTITY, PENDING_FIRES_COMPONENT, () => ({
+          queue: [...existing, fire],
+        }));
+        const cooldown = (req.attack.stats as { cooldown?: number }).cooldown ?? 0;
+        // Always write cooldownTimer so first-time attackers (e.g. Enemies whose
+        // archetype declared `attacks` without a prior cooldownTimer init) get
+        // their cooldown started.
+        world.mutate(req.attacker, COOLDOWN_TIMER_COMPONENT, () => ({
+          remaining: cooldown,
+        }));
+        return true;
+      };
       const ctx = {
         tickIndex,
         dt,
@@ -292,6 +354,7 @@ export function createEngine(
         emit(event: GameEvent) {
           pending.push(event);
         },
+        fireAttack,
       };
       for (const phase of PHASE_ORDER) {
         world.setPhase(phase);

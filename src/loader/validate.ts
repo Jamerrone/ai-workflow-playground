@@ -22,8 +22,8 @@ const BUILTIN_DAMAGE_PREVIEW_KINDS: ReadonlySet<string> = new Set([
 const BUILTIN_KINDS = new Map<string, ReadonlySet<string>>([
   ["placementMode", new Set(["fixed", "free"])],
   ["waveTrigger", new Set(["manual", "auto", "hybrid"])],
-  ["targeting", new Set(["closest-to-base", "lowest-hp", "highest-hp", "tag-priority"])],
-  ["strategy", new Set(["closest-to-base", "lowest-hp", "highest-hp", "tag-priority"])],
+  ["targeting", new Set(["closest-to-base", "closest", "lowest-hp", "highest-hp", "tag-priority"])],
+  ["strategy", new Set(["closest-to-base", "closest", "lowest-hp", "highest-hp", "tag-priority"])],
   ["attackSelection", new Set(["declaration-order", "highest-damage"])],
   ["attackEffect", new Set(["damage", "splash", "slow", "dot", "pierce", "bounce", "line-pierce", "minimum-range", "target-count", "projectile-count", "heal"])],
   ["upgradeOp", new Set(["stat", "attackMutation", "guardModifier"])],
@@ -267,6 +267,61 @@ function validateEnemy(ctx: ValidationContext, id: string, raw: Record<string, u
       expected: "string[]",
       actual: typeof raw.tags,
     });
+  }
+  // Enemy archetype Attacks (ADR-0010 / issue #46): same shape as Tower
+  // attacks — id required and unique per archetype, effects validated against
+  // the AttackEffect registry, kind discriminators sanity-checked.
+  if (raw.attacks !== undefined) {
+    if (!Array.isArray(raw.attacks)) {
+      ctx.errors.push({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.attacks`,
+        message: `Enemy '${id}' field 'attacks' must be an array.`,
+        expected: "Attack[]",
+        actual: typeof raw.attacks,
+      });
+    } else {
+      const seenIds = new Set<string>();
+      raw.attacks.forEach((atk, i) => {
+        if (!isObject(atk)) return;
+        const atkPath = `${path}.attacks[${i}]`;
+        const atkId = typeof atk.id === "string" ? atk.id : undefined;
+        if (atkId === undefined) {
+          ctx.errors.push({
+            severity: "error",
+            code: "INVALID_FIELD",
+            path: `${atkPath}.id`,
+            message: `Attack missing 'id'.`,
+            expected: "string",
+            actual: typeof atk.id,
+          });
+        } else if (seenIds.has(atkId)) {
+          ctx.errors.push({
+            severity: "error",
+            code: "INVALID_FIELD",
+            path: `${atkPath}.id`,
+            message: `Duplicate Attack id '${atkId}' on enemy '${id}'.`,
+          });
+        } else {
+          seenIds.add(atkId);
+        }
+        if (Array.isArray(atk.effects)) {
+          atk.effects.forEach((eff, j) => {
+            if (!isObject(eff)) return;
+            const effPath = `${atkPath}.effects[${j}]`;
+            checkKind(ctx, "attackEffect", eff, effPath);
+            validateAttackEffectFields(ctx, eff, effPath);
+          });
+        }
+      });
+    }
+  }
+  if (raw.targeting !== undefined && isObject(raw.targeting)) {
+    checkKind(ctx, "targeting", raw.targeting, `${path}.targeting`);
+  }
+  if (raw.attackSelection !== undefined && isObject(raw.attackSelection)) {
+    checkKind(ctx, "attackSelection", raw.attackSelection, `${path}.attackSelection`);
   }
 }
 

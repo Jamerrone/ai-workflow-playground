@@ -18,8 +18,19 @@ function entityHp(c: TargetingCandidate): number {
   return (c.components.get("health") as { hp: number } | undefined)?.hp ?? 0;
 }
 
+// Tag-bearing components by convention: each EntityKind that participates in
+// targeting can expose a `tags` field on its own discriminator component. The
+// kernel does not enforce this; targeting strategies just check the conventional
+// component names in order, so `tag-priority` works uniformly across Enemy
+// targets and Guard targets.
+const TAG_BEARING_COMPONENTS: readonly string[] = ["enemy", "guard"];
+
 function entityTags(c: TargetingCandidate): readonly string[] {
-  return (c.components.get("enemy") as { tags?: readonly string[] } | undefined)?.tags ?? [];
+  for (const name of TAG_BEARING_COMPONENTS) {
+    const comp = c.components.get(name) as { tags?: readonly string[] } | undefined;
+    if (comp?.tags) return comp.tags;
+  }
+  return [];
 }
 
 function closestToBaseAmong(
@@ -73,6 +84,27 @@ const highestHpStrategy: TargetingStrategyDef = {
   select: (ctx) => pickByHp(ctx.eligible, "highest"),
 };
 
+// `closest`: tag-agnostic Manhattan-nearest target relative to the attacker's
+// own position. Distinct from `closest-to-base` (which sorts by distance to
+// the Base) — `closest` is the natural default for an Enemy with Attacks since
+// Enemies don't have a Base to anchor on. ADR-0010 / issue #46.
+const closestStrategy: TargetingStrategyDef = {
+  kind: "closest",
+  validate: () => ({ ok: true }),
+  select(ctx) {
+    let best: TargetingCandidate | undefined;
+    let bestDist = Infinity;
+    for (const c of ctx.eligible) {
+      const d = manhattan(entityPosition(c), ctx.source.position);
+      if (d < bestDist) {
+        best = c;
+        bestDist = d;
+      }
+    }
+    return best;
+  },
+};
+
 const tagPriorityStrategy: TargetingStrategyDef = {
   kind: "tag-priority",
   validate(config): TargetingStrategyValidationResult {
@@ -104,6 +136,7 @@ export const targetingStrategiesPlugin: Plugin = {
   id: "targeting-strategies",
   register(api) {
     api.registerTargetingStrategy(closestToBaseStrategy);
+    api.registerTargetingStrategy(closestStrategy);
     api.registerTargetingStrategy(lowestHpStrategy);
     api.registerTargetingStrategy(highestHpStrategy);
     api.registerTargetingStrategy(tagPriorityStrategy);

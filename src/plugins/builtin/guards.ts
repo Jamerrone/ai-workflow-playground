@@ -2,16 +2,90 @@ import { actionFailure } from "../../kernel/action-result.js";
 import {
   PHASE_ORDER,
   Phase,
+  type AttackEffectConfig,
   type AttackEffectContext,
   type AttackEffectDef,
+  type AttackSelectionCandidate,
+  type AttackSelectionStrategyConfig,
   type GameEvent,
   type MoveRallyPointAction,
   type Plugin,
   type Position,
   type RewardContext,
+  type SystemContext,
+  type TargetingCandidate,
+  type TargetingStrategyConfig,
   type UpgradeOpContext,
   type UpgradeOpDef,
 } from "../../types.js";
+
+const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
+const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = {
+  kind: "declaration-order",
+};
+
+interface AttackData {
+  readonly id: string;
+  readonly stats: { readonly range: number; readonly cooldown: number };
+  readonly effects: ReadonlyArray<AttackEffectConfig>;
+  readonly targetFilter?: {
+    readonly require?: readonly string[];
+    readonly exclude?: readonly string[];
+  };
+}
+
+interface GuardModifier {
+  readonly attackId: string;
+  readonly effectKind: string;
+  readonly field: string;
+  readonly delta: number;
+}
+
+function matchesFilter(
+  tags: readonly string[],
+  filter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] },
+): boolean {
+  if (!filter) return true;
+  if (filter.require && filter.require.length > 0) {
+    if (!filter.require.every((t) => tags.includes(t))) return false;
+  }
+  if (filter.exclude && filter.exclude.length > 0) {
+    if (filter.exclude.some((t) => tags.includes(t))) return false;
+  }
+  return true;
+}
+
+function entityTags(
+  components: ReadonlyMap<string, unknown>,
+): readonly string[] {
+  for (const name of ["enemy", "guard"]) {
+    const c = components.get(name) as { tags?: readonly string[] } | undefined;
+    if (c?.tags) return c.tags;
+  }
+  return [];
+}
+
+function applyGuardModifiers(
+  attacks: ReadonlyArray<AttackData>,
+  modifiers: ReadonlyArray<GuardModifier>,
+): AttackData[] {
+  if (modifiers.length === 0) return [...attacks];
+  return attacks.map((attack) => {
+    const effects = attack.effects.map((effect) => {
+      const applicable = modifiers.filter(
+        (m) => m.attackId === attack.id && m.effectKind === effect.kind,
+      );
+      if (applicable.length === 0) return effect;
+      const stats = { ...(effect.stats ?? {}) } as Record<string, unknown>;
+      for (const m of applicable) {
+        const base = typeof stats[m.field] === "number" ? (stats[m.field] as number) : 0;
+        stats[m.field] = base + m.delta;
+      }
+      return { ...effect, stats };
+    });
+    return { ...attack, effects };
+  });
+}
 
 interface SummonConfig {
   readonly summons: string;
@@ -145,6 +219,7 @@ export const guardsPlugin: Plugin = {
         "parent",
         "attacks",
         "cooldownTimer",
+        "engagement",
       ],
     });
 
@@ -160,19 +235,21 @@ export const guardsPlugin: Plugin = {
       const guardId = `guard:${towerId}:${nextGuardSerial++}`;
       const summonsBucket = ctx.registry.summons as Record<
         string,
-        { hp?: number; attacks?: ReadonlyArray<unknown> } | undefined
+        { hp?: number; attacks?: ReadonlyArray<unknown>; tags?: ReadonlyArray<string> } | undefined
       >;
       const archetype = summonsBucket[summon.summons];
       const hp = archetype?.hp ?? 10;
       const attacks = archetype?.attacks ?? [];
+      const tags = archetype?.tags ?? [];
       ctx.world.spawn(guardId, {
-        guard: { archetype: summon.summons },
+        guard: { archetype: summon.summons, tags: [...tags] },
         position: { x: position.x, y: position.y },
         health: { hp, max: hp },
         rallyPoint: { x: position.x, y: position.y },
         parent: { tower: towerId },
         attacks: structuredClone(attacks) as unknown[],
         cooldownTimer: { remaining: 0 },
+        engagement: {} as { target?: string },
       });
       ctx.emit({
         kind: "guardSpawned",
@@ -345,77 +422,155 @@ export const guardsPlugin: Plugin = {
       },
     });
 
-    // Engagement assignment: each tick, each Guard picks the closest in-range
-    // Enemy that hasn't already exceeded the `enemyEngagementCap` GameRule.
-    // Iteration is in stable entity-insertion order, so the cap deterministically
-    // selects the first N Guards (per Enemy) by id.
+    // Sticky engagement: a Guard's `engagement.target` persists across ticks
+    // until the target dies or leaves range of every Attack. Only then does
+    // (re-)selection run — which picks among in-range Enemies whose tags pass
+    // any of the Guard's resolved (with modifiers applied) Attack
+    // `targetFilter`s, via the parent Tower's TargetingStrategy.
+    //
+    // The `enemyEngagementCap` GameRule is enforced on the Enemy side
+    // (`enemies/engagement`), not here: the cap counts how many Enemies engage
+    // a given Guard, not the inverse.
     api.registerSystem({
       id: "guards/engagement",
       phase: Phase.Simulation,
-      reads: ["guard", "position", "engagement"],
+      reads: ["guard", "position", "engagement", "parent", "attacks"],
       writes: ["engagement"],
       run(ctx) {
-        const cap = (ctx.gameRules.get("enemyEngagementCap") as number) ?? 3;
-        const summonsBucket = ctx.registry.summons as Record<
-          string,
-          { attacks?: ReadonlyArray<{ stats: { range: number } }> } | undefined
-        >;
-        const enemies = ctx.world.query({ all: ["enemy", "position"] });
-        const engagedCount = new Map<string, number>();
-        const guards = ctx.world.query({ all: ["guard", "position"] });
+        const guards = ctx.world.query({
+          all: ["guard", "position", "engagement"],
+        });
         for (const g of guards) {
           const gPos = g.components.get("position") as Position;
-          const archetypeId = (g.components.get("guard") as { archetype: string })
-            .archetype;
-          const attacks = summonsBucket[archetypeId]?.attacks ?? [];
-          const maxRange = attacks.reduce(
-            (m, a) => Math.max(m, a.stats.range),
-            0,
-          );
-          if (maxRange <= 0) {
-            ctx.world.mutate(g.id, "engagement", () => ({}));
+          const parent = g.components.get("parent") as
+            | { tower: string }
+            | undefined;
+          const tower = parent ? ctx.world.get(parent.tower) : undefined;
+          const baseAttacks =
+            (g.components.get("attacks") as
+              | ReadonlyArray<AttackData>
+              | undefined) ?? [];
+          const modifiers =
+            (tower?.components.get("guardModifiers") as
+              | ReadonlyArray<GuardModifier>
+              | undefined) ?? [];
+          const attacks = applyGuardModifiers(baseAttacks, modifiers);
+          if (attacks.length === 0) {
+            const cur = g.components.get("engagement") as
+              | { target?: string }
+              | undefined;
+            if (cur?.target) {
+              ctx.world.mutate(g.id, "engagement", () => ({}));
+            }
             continue;
           }
-          let chosen: string | undefined;
-          let chosenDistSq = Infinity;
-          for (const e of enemies) {
-            if ((engagedCount.get(e.id) ?? 0) >= cap) continue;
+
+          // Check existing engagement for stickiness.
+          const cur = g.components.get("engagement") as
+            | { target?: string }
+            | undefined;
+          if (cur?.target) {
+            const target = ctx.world.get(cur.target);
+            if (target) {
+              const tPos = target.components.get("position") as
+                | Position
+                | undefined;
+              if (tPos) {
+                const dx = tPos.x - gPos.x;
+                const dy = tPos.y - gPos.y;
+                const distSq = dx * dx + dy * dy;
+                // Still in range of any Attack? Then keep the engagement.
+                const inRange = attacks.some(
+                  (a) => distSq <= a.stats.range * a.stats.range,
+                );
+                if (inRange) continue;
+              }
+            }
+            // Target gone or out of range — clear before re-selecting.
+            ctx.world.mutate(g.id, "engagement", () => ({}));
+          }
+
+          // (Re-)select via the parent Tower's TargetingStrategy across
+          // candidates passing any Attack's targetFilter and in any Attack's
+          // range.
+          const enemies = ctx.world.query({ all: ["enemy", "position"] });
+          const eligible = enemies.filter((e) => {
             const ePos = e.components.get("position") as Position;
             const dx = ePos.x - gPos.x;
             const dy = ePos.y - gPos.y;
-            const dSq = dx * dx + dy * dy;
-            if (dSq > maxRange * maxRange) continue;
-            if (dSq < chosenDistSq) {
-              chosen = e.id;
-              chosenDistSq = dSq;
-            }
-          }
-          if (chosen) {
-            engagedCount.set(chosen, (engagedCount.get(chosen) ?? 0) + 1);
-            ctx.world.mutate(g.id, "engagement", () => ({ enemy: chosen }));
-          } else {
-            ctx.world.mutate(g.id, "engagement", () => ({}));
+            const distSq = dx * dx + dy * dy;
+            const tags = entityTags(e.components);
+            return attacks.some((a) => {
+              if (distSq > a.stats.range * a.stats.range) return false;
+              return matchesFilter(tags, a.targetFilter);
+            });
+          });
+          if (eligible.length === 0) continue;
+
+          const targetingConfig: TargetingStrategyConfig =
+            (tower?.components.get("targeting") as TargetingStrategyConfig | undefined) ??
+            DEFAULT_TARGETING;
+          const strategyDef = ctx.targetingStrategies.get(targetingConfig.kind);
+          if (!strategyDef) continue;
+
+          // basePosition: Guards live under their parent Tower; the Tower's
+          // first-base reference is unimportant for sticky engagement (the
+          // `closest-to-base` strategy still works because it sorts by distance
+          // to a fixed point — here we pass the Guard's own position as a
+          // reasonable fallback when no scenario base is available; built-in
+          // strategies that need a real base run on Towers, not Guards, in
+          // typical Scenarios).
+          const scenario = ctx.scenarioId
+            ? (ctx.registry.scenarios as Record<string, { map?: string } | undefined>)[
+                ctx.scenarioId
+              ]
+            : undefined;
+          const map = scenario?.map
+            ? (ctx.registry.maps as Record<
+                string,
+                { bases?: ReadonlyArray<{ position: Position }> } | undefined
+              >)[scenario.map]
+            : undefined;
+          const basePosition = map?.bases?.[0]?.position ?? { ...gPos };
+
+          const picked = strategyDef.select({
+            source: { id: g.id, position: { ...gPos } },
+            basePosition,
+            eligible: eligible as TargetingCandidate[],
+            config: targetingConfig,
+          });
+          if (picked) {
+            ctx.world.mutate(g.id, "engagement", () => ({ target: picked.id }));
           }
         }
       },
     });
 
-    // Guard combat: each Guard with an engagement and an off-cooldown Attack
-    // whose range covers the engaged Enemy fires it. Damage flows through the
-    // AttackEffect registry just like Tower attacks.
+    // Guard combat: each Guard with an engagement.target advances its cooldown
+    // and fires one Attack — chosen by the parent Tower's AttackSelectionStrategy
+    // — through `ctx.fireAttack`. Damage / status / etc. resolution flows
+    // through the `attack-effects/apply` System the same way Tower fires do.
     api.registerSystem({
       id: "guards/attack",
       phase: Phase.Simulation,
-      reads: ["guard", "engagement", "position", "attacks", "cooldownTimer"],
-      writes: ["cooldownTimer"],
+      reads: [
+        "guard",
+        "engagement",
+        "position",
+        "attacks",
+        "cooldownTimer",
+        "parent",
+        "guardModifiers",
+      ],
+      writes: ["cooldownTimer", "pendingFires"],
       after: ["guards/engagement"],
-      run(ctx) {
+      run(ctx: SystemContext) {
         for (const g of ctx.world.query({
           all: ["guard", "engagement", "position", "attacks", "cooldownTimer"],
         })) {
-          const eng = g.components.get("engagement") as { enemy?: string };
-          if (!eng.enemy) continue;
-          const enemy = ctx.world.get(eng.enemy);
+          const eng = g.components.get("engagement") as { target?: string };
+          if (!eng.target) continue;
+          const enemy = ctx.world.get(eng.target);
           if (!enemy) continue;
           const cd = g.components.get("cooldownTimer") as { remaining: number };
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
@@ -425,84 +580,79 @@ export const guardsPlugin: Plugin = {
             }));
             continue;
           }
-          const attacks = g.components.get("attacks") as ReadonlyArray<{
-            id: string;
-            stats: { range: number; cooldown: number };
-            effects: ReadonlyArray<{
-              kind: string;
-              id?: string;
-              stats?: Record<string, unknown>;
-            }>;
-          }>;
-          const gPos = g.components.get("position") as Position;
-          const ePos = enemy.components.get("position") as Position;
-          const dx = ePos.x - gPos.x;
-          const dy = ePos.y - gPos.y;
-          const distSq = dx * dx + dy * dy;
-          const fired = attacks.find(
-            (a) => distSq <= a.stats.range * a.stats.range,
-          );
-          if (!fired) {
-            ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: 0 }));
-            continue;
-          }
-          // Live-resolve modifiers from the parent Tower. Buffs are stored on
-          // the Tower, not copied onto each Guard, so the same `guardModifiers`
-          // entry applies to currently-living and yet-unborn Guards alike.
+          ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: 0 }));
+
           const parent = g.components.get("parent") as { tower: string };
           const tower = ctx.world.get(parent.tower);
           const modifiers =
             (tower?.components.get("guardModifiers") as
-              | ReadonlyArray<{
-                  attackId: string;
-                  effectKind: string;
-                  field: string;
-                  delta: number;
-                }>
+              | ReadonlyArray<GuardModifier>
               | undefined) ?? [];
-          const resolvedEffects = fired.effects.map((effect) => {
-            const applicable = modifiers.filter(
-              (m) => m.attackId === fired.id && m.effectKind === effect.kind,
-            );
-            if (applicable.length === 0) return effect;
-            const stats = { ...(effect.stats ?? {}) } as Record<string, unknown>;
-            for (const m of applicable) {
-              const base = typeof stats[m.field] === "number" ? (stats[m.field] as number) : 0;
-              stats[m.field] = base + m.delta;
-            }
-            return { ...effect, stats };
-          });
-          const fire = {
+          const baseAttacks =
+            (g.components.get("attacks") as
+              | ReadonlyArray<AttackData>
+              | undefined) ?? [];
+          const attacks = applyGuardModifiers(baseAttacks, modifiers);
+
+          const gPos = g.components.get("position") as Position;
+          const ePos = enemy.components.get("position") as Position;
+          const targetTags = entityTags(enemy.components);
+          const dx = ePos.x - gPos.x;
+          const dy = ePos.y - gPos.y;
+          const distSq = dx * dx + dy * dy;
+
+          const eligible: AttackSelectionCandidate[] = attacks
+            .filter((a) => distSq <= a.stats.range * a.stats.range)
+            .filter((a) => matchesFilter(targetTags, a.targetFilter))
+            .map((a) => ({
+              id: a.id,
+              stats: a.stats,
+              ...(a.targetFilter !== undefined ? { targetFilter: a.targetFilter } : {}),
+              effects: a.effects,
+            }));
+          if (eligible.length === 0) continue;
+
+          const selectionConfig: AttackSelectionStrategyConfig =
+            ((tower?.components.get("tower") &&
+              (ctx.registry.towers as Record<
+                string,
+                { attackSelection?: AttackSelectionStrategyConfig } | undefined
+              >)[
+                (tower!.components.get("tower") as { archetype: string }).archetype
+              ]?.attackSelection) as AttackSelectionStrategyConfig | undefined) ??
+            DEFAULT_ATTACK_SELECTION;
+          const selectionDef = ctx.attackSelectionStrategies.get(selectionConfig.kind);
+          if (!selectionDef) continue;
+          const chosen = selectionDef.select({
             source: { id: g.id, position: { ...gPos } },
-            primaryTarget: { id: enemy.id, position: { ...ePos } },
-            attack: { id: fired.id, stats: fired.stats },
-            effects: resolvedEffects,
-          };
-          const state = { targets: [enemy.id], abort: false };
-          for (const effect of resolvedEffects) {
-            if (state.abort) break;
-            const def = ctx.attackEffects.get(effect.kind);
-            if (!def) continue;
-            def.apply({
-              tickIndex: ctx.tickIndex,
-              dt: ctx.dt,
-              world: ctx.world,
-              registry: ctx.registry,
-              fire,
-              effect,
-              state,
-              emit: ctx.emit,
-            });
-          }
-          ctx.world.mutate(g.id, "cooldownTimer", () => ({
-            remaining: fired.stats.cooldown,
-          }));
+            eligible,
+            config: selectionConfig,
+            attackEffects: ctx.attackEffects,
+            world: ctx.world,
+            resolveTarget: () => ({ id: enemy.id, position: { ...ePos } }),
+          });
+          if (!chosen) continue;
+
+          const fired = ctx.fireAttack({
+            attacker: g.id,
+            attack: {
+              id: chosen.id,
+              stats: chosen.stats,
+              effects: chosen.effects,
+              ...(chosen.targetFilter !== undefined
+                ? { targetFilter: chosen.targetFilter }
+                : {}),
+            },
+            primaryTarget: enemy.id,
+          });
+          if (!fired) continue;
+
           ctx.emit({
             kind: "guardAttacked",
             tick: ctx.tickIndex,
             guard: g.id,
             enemy: enemy.id,
-            attackId: fired.id,
+            attackId: chosen.id,
           });
         }
       },
@@ -523,9 +673,9 @@ export const guardsPlugin: Plugin = {
         >;
         for (const g of ctx.world.query({ all: ["guard", "health"] })) {
           const eng = g.components.get("engagement") as
-            | { enemy?: string }
+            | { target?: string }
             | undefined;
-          if (eng?.enemy) continue;
+          if (eng?.target) continue;
           const archetypeId = (g.components.get("guard") as { archetype: string })
             .archetype;
           const idleRegen = summonsBucket[archetypeId]?.idleRegen ?? 0;

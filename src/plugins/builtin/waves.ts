@@ -80,6 +80,7 @@ interface EnemyDef {
     readonly baseDamage: number;
   };
   readonly killReward: number;
+  readonly attacks?: ReadonlyArray<unknown>;
 }
 
 function resolveGroupPaths(
@@ -178,7 +179,15 @@ export const wavesPlugin: Plugin = {
       id: "waves/spawn",
       phase: Phase.Wave,
       reads: [],
-      writes: ["waveState", "enemy", "position", "health", "pathProgress"],
+      writes: [
+        "waveState",
+        "enemy",
+        "position",
+        "health",
+        "pathProgress",
+        "attacks",
+        "engagement",
+      ],
       run(ctx) {
         if (!ctx.scenarioId) return;
         const game = ctx.world.get(STATE_ENTITY);
@@ -255,6 +264,8 @@ export const wavesPlugin: Plugin = {
             const enemyDef = (ctx.registry.enemies as Record<string, EnemyDef>)[group.enemy]!;
             const spawnAt = path.waypoints[0]!;
             const enemyId = `enemy:${group.id}:${path.id}:${indexOnPath}:w${ws.nextIndex}:${ctx.tickIndex}`;
+            const hasAttacks =
+              Array.isArray(enemyDef.attacks) && enemyDef.attacks.length > 0;
             ctx.world.spawn(enemyId, {
               enemy: {
                 archetype: group.enemy,
@@ -271,6 +282,12 @@ export const wavesPlugin: Plugin = {
                 speed: enemyDef.stats.speed,
                 baseDamage: enemyDef.stats.baseDamage,
               },
+              ...(hasAttacks
+                ? {
+                    attacks: structuredClone(enemyDef.attacks) as unknown[],
+                    engagement: {} as { target?: string },
+                  }
+                : {}),
             });
           }
           newSent[group.id] = shouldHave;
