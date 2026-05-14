@@ -131,6 +131,10 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     registerGameRule(def) {
       gameRules.set(def.key, def as GameRuleDef);
     },
+    // Bucket validators are Loader-only — the running Engine doesn't consume
+    // them. Accepted here so the RegistrationApi surface is uniform across the
+    // engine and the Loader's `collectBucketValidators` pass.
+    registerBucketValidator() {},
     onScenarioLoad(hook) {
       scenarioLoadHooks.push(hook);
     },

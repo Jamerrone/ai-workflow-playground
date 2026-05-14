@@ -8,6 +8,11 @@ import {
   type UpgradeOpDef,
   type UpgradeOpValidationResult,
 } from "../../types.js";
+import {
+  checkKind,
+  validateUpgradeOpFields,
+} from "../../loader/validator-helpers.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 
@@ -244,9 +249,26 @@ function purchaseHandler(
   return { ok: true, effect: { tower: action.tower, upgrade: action.upgrade, gold: newGold } };
 }
 
+function validateUpgrade(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const path = ctx.path;
+  if (Array.isArray(raw.ops)) {
+    raw.ops.forEach((op, i) => {
+      if (!isObject(op)) return;
+      const opPath = `${path}.ops[${i}]`;
+      checkKind(ctx, "upgradeOp", op, opPath);
+      validateUpgradeOpFields(ctx, op, opPath);
+    });
+  }
+}
+
 export const upgradesPlugin: Plugin = {
   id: "upgrades",
   register(api) {
+    // Upgrade JSON bucket validator — kind discriminators on ops and the
+    // built-in op-specific required fields.
+    api.registerBucketValidator({ bucket: "upgrades", validate: validateUpgrade });
+
     api.registerUpgradeOp(statOp);
     api.registerUpgradeOp(attackMutationOp);
     api.registerActionHandler({

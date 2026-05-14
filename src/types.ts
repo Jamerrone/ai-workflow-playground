@@ -401,6 +401,13 @@ export interface RegistrationApi {
   registerAttackSelectionStrategy(def: AttackSelectionStrategyDef): void;
   registerUpgradeOp(def: UpgradeOpDef): void;
   registerGameRule<T = unknown>(def: GameRuleDef<T>): void;
+  /**
+   * Register a Loader bucket validator. Built-in buckets (Maps, Towers, Enemies,
+   * Waves, Scenarios, Upgrades) are contributed by the built-in plugins through
+   * this same surface — third-party plugins use it identically to contribute
+   * validators for entirely new buckets. See ADR-0013.
+   */
+  registerBucketValidator(def: import("./loader/types.js").BucketValidatorDef): void;
   onScenarioLoad(hook: ScenarioLoadHook): void;
 }
 

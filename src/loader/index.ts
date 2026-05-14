@@ -1,9 +1,11 @@
-import type { ConfigRegistry } from "../types.js";
+import type { ConfigRegistry, Plugin, RegistrationApi } from "../types.js";
+import { builtInBundle } from "../plugins/builtin/index.js";
 import { resolveInheritance } from "./inheritance.js";
 import { normalizeShorthand, isObject } from "./normalize.js";
 import { checkReferences } from "./references.js";
 import {
   BUCKETS,
+  type BucketValidatorDef,
   type LoaderError,
   type LoaderInput,
   type LoaderOptions,
@@ -11,7 +13,21 @@ import {
 } from "./types.js";
 import { validateAll } from "./validate.js";
 
+// Default bucket validators — the set contributed by the built-in plugin bundle.
+// Callers that pass their own `options.bucketValidators` bypass this. Built-in
+// plugins are imported through the plugin surface (registerBucketValidator);
+// the Loader contains no hardcoded bucket-validator list of its own.
+let defaultValidators: ReadonlyMap<string, BucketValidatorDef> | null = null;
+function getDefaultValidators(): ReadonlyMap<string, BucketValidatorDef> {
+  if (defaultValidators === null) {
+    defaultValidators = collectBucketValidators(builtInBundle);
+  }
+  return defaultValidators;
+}
+
 export type {
+  BucketValidatorContext,
+  BucketValidatorDef,
   LoaderError,
   LoaderErrorSource,
   LoaderInput,
@@ -20,10 +36,51 @@ export type {
   PluginManifestEntry,
 } from "./types.js";
 
+/**
+ * Run each Plugin through a minimal RegistrationApi that captures only bucket
+ * validators. Returned map keys the validator by its `bucket` field. Used by
+ * the wrapping `buildRegistry` in `src/index.ts` to default the Loader to the
+ * built-in bundle, and exported so third-party hosts can assemble their own
+ * Plugin sets.
+ */
+export function collectBucketValidators(
+  plugins: readonly Plugin[],
+): ReadonlyMap<string, BucketValidatorDef> {
+  const validators = new Map<string, BucketValidatorDef>();
+  const noop = (): void => {};
+  const api: RegistrationApi = {
+    registerComponent: noop,
+    registerEntityKind: noop,
+    registerSystem: noop,
+    registerActionHandler: noop,
+    registerPlacementMode: noop,
+    registerMapFeature: noop,
+    registerAttackEffect: noop,
+    registerReward: noop,
+    registerTargetingStrategy: noop,
+    registerAttackSelectionStrategy: noop,
+    registerUpgradeOp: noop,
+    registerGameRule: noop,
+    registerBucketValidator(def) {
+      validators.set(def.bucket, def);
+    },
+    onScenarioLoad: noop,
+  };
+  for (const plugin of plugins) plugin.register(api);
+  return validators;
+}
+
 export function buildRegistry(
   rawInput: LoaderInput,
   options: LoaderOptions = {},
 ): LoaderResult {
+  // Default bucketValidators to the built-in plugin bundle's contributions
+  // when the caller didn't supply their own. The wrapped Loader still has no
+  // hardcoded bucket dispatch — validators arrive via the plugin surface.
+  const effectiveOptions: LoaderOptions =
+    options.bucketValidators !== undefined
+      ? options
+      : { ...options, bucketValidators: getDefaultValidators() };
   const errors: LoaderError[] = [];
   const warnings: LoaderError[] = [];
 
@@ -38,7 +95,7 @@ export function buildRegistry(
   // Pass 3: per-entry validation (units, kinds, required fields).
   validateAll({
     input: resolved,
-    options,
+    options: effectiveOptions,
     errors,
     warnings,
     abstractIds,

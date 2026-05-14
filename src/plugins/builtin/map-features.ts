@@ -6,6 +6,9 @@ import {
   type Plugin,
   type Position,
 } from "../../types.js";
+import { checkKind, requireArray, requireNumber } from "../../loader/validator-helpers.js";
+import { isObject } from "../../loader/normalize.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
 
 interface BlockedRegion {
   readonly x: number;
@@ -52,9 +55,61 @@ function onPath(p: Position, paths: ReadonlyArray<MapPath>): boolean {
   return false;
 }
 
+function validateMap(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const path = ctx.path;
+  requireNumber(ctx, raw, "width", path);
+  requireNumber(ctx, raw, "height", path);
+  requireArray(ctx, raw, "paths", path);
+  requireArray(ctx, raw, "bases", path);
+  if (!isObject(raw.placementMode)) {
+    ctx.addError({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.placementMode`,
+      message: `Map '${ctx.id}' is missing 'placementMode'.`,
+      expected: "{ kind: ... }",
+      actual: String(raw.placementMode),
+    });
+  } else {
+    checkKind(ctx, "placementMode", raw.placementMode, `${path}.placementMode`);
+  }
+  if (Array.isArray(raw.paths)) {
+    raw.paths.forEach((p, i) => {
+      if (!isObject(p)) return;
+      const wps = p.waypoints;
+      if (!Array.isArray(wps)) return;
+      for (let j = 1; j < wps.length; j++) {
+        const a = wps[j - 1];
+        const b = wps[j];
+        if (!isObject(a) || !isObject(b)) continue;
+        const dx = (b.x as number) - (a.x as number);
+        const dy = (b.y as number) - (a.y as number);
+        if (dx !== 0 && dy !== 0) {
+          ctx.addError({
+            severity: "error",
+            code: "INVALID_FIELD",
+            path: `${path}.paths[${i}].waypoints[${j}]`,
+            message: `Consecutive waypoints must differ on exactly one axis; got diagonal step.`,
+            expected: "axis-aligned step (dx==0 XOR dy==0)",
+            actual: `(${dx},${dy})`,
+            hint: "Break the diagonal into two waypoints.",
+          });
+        }
+      }
+    });
+  }
+}
+
 export const mapFeaturesPlugin: Plugin = {
   id: "map-features",
   register(api) {
+    // Map JSON loader validator — placement mode, paths, bases, and the
+    // axis-aligned-waypoints invariant. Lives here because map-features is
+    // the plugin that ships Map-level concerns (BlockedRegion + the `free`
+    // PlacementMode).
+    api.registerBucketValidator({ bucket: "maps", validate: validateMap });
+
     // The component carries the authored `kind` string verbatim so renderers can
     // decorate; the engine itself only consults x/y/width/height.
     api.registerComponent({ name: "blockedRegion", writableIn: PHASE_ORDER });
