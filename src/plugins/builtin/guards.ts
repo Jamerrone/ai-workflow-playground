@@ -235,6 +235,31 @@ export const guardsPlugin: Plugin = {
       },
     });
 
+    // Guard death: Guards with hp ≤ 0 are destroyed and emit guardDied. The
+    // emitted event feeds `guards/track-death` (per-Tower respawn cadence) and
+    // any renderer subscribers.
+    api.registerSystem({
+      id: "guards/death",
+      phase: Phase.Reward,
+      reads: ["guard", "health", "parent"],
+      writes: [],
+      run(ctx) {
+        const dead = ctx.world
+          .query({ all: ["guard", "health"] })
+          .filter((g) => (g.components.get("health") as { hp: number }).hp <= 0);
+        for (const g of dead) {
+          const parent = g.components.get("parent") as { tower: string };
+          ctx.world.destroy(g.id);
+          ctx.emit({
+            kind: "guardDied",
+            tick: ctx.tickIndex,
+            guard: g.id,
+            tower: parent.tower,
+          });
+        }
+      },
+    });
+
     // When a Tower is sold, every Guard parented to it is destroyed in the same
     // tick. No respawns: the Tower itself is gone, so there is no summonState
     // to advance.

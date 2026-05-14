@@ -333,6 +333,78 @@ describe("guards plugin: skeleton", () => {
     expect(samples[2]).toEqual([5]);
   });
 
+  describe("unarmed wall guard", () => {
+    it("a Guard with no attacks absorbs damage, dies, and never emits guardAttacked", () => {
+      const events: GameEvent[] = [];
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          // Damage the guard by 4 HP per tick in Wave phase.
+          api.registerSystem({
+            id: "test/damage",
+            phase: Phase.Wave,
+            reads: ["guard", "health"],
+            writes: ["health"],
+            run(ctx) {
+              for (const g of ctx.world.query({ all: ["guard", "health"] })) {
+                const h = g.components.get("health") as { hp: number; max: number };
+                ctx.world.mutate(g.id, "health", () => ({ ...h, hp: h.hp - 4 }));
+              }
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "wall-guard",
+                maxCount: 1,
+                respawnCooldown: 99,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "wall-guard": { hp: 10, speed: 0, idleRegen: 0, attacks: [] },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.onEvent((e) => events.push(e));
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(1); // hp 10 → 6
+      engine.tick(1); // 6 → 2
+      engine.tick(1); // 2 → -2 → dies
+      engine.dispose();
+
+      // Wall guard never retaliated.
+      expect(events.find((e) => e.kind === "guardAttacked")).toBeUndefined();
+      // Wall guard died and emitted guardDied.
+      const died = events.find((e) => e.kind === "guardDied");
+      expect(died).toBeDefined();
+    });
+  });
+
   describe("sell despawns guards", () => {
     it("destroys every Guard parented to a Tower when that Tower is sold", () => {
       let aliveBefore: number | null = null;
