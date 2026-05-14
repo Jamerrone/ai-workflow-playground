@@ -333,6 +333,177 @@ describe("guards plugin: skeleton", () => {
     expect(samples[2]).toEqual([5]);
   });
 
+  describe("heal AttackEffect", () => {
+    it("raises target HP, clamps at max, and emits entityHealed", () => {
+      const captured: GameEvent[] = [];
+      let observedHp: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/fire-heal",
+            phase: Phase.Effect,
+            reads: ["guard", "health"],
+            writes: ["health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              const heal = ctx.attackEffects.get("heal");
+              if (!heal) return;
+              const guards = ctx.world.query({ all: ["guard"] });
+              const target = guards[0]!;
+              // Damage the guard first.
+              ctx.world.mutate(target.id, "health", () => ({ hp: 2, max: 10 }));
+              heal.apply({
+                tickIndex: ctx.tickIndex,
+                dt: ctx.dt,
+                world: ctx.world,
+                registry: ctx.registry,
+                fire: {
+                  source: { id: "test/healer", position: { x: 0, y: 0 } },
+                  primaryTarget: { id: target.id, position: { x: 0, y: 0 } },
+                  attack: { id: "mend", stats: {}, targetFilter: undefined },
+                  effects: [{ kind: "heal", stats: { amount: 5 } }],
+                },
+                effect: { kind: "heal", stats: { amount: 5 } },
+                state: { targets: [target.id], abort: false },
+                emit: (e: GameEvent) => captured.push(e),
+              });
+              observedHp = (ctx.world.get(target.id)!.components.get("health") as {
+                hp: number;
+              }).hp;
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": { hp: 10, speed: 0, idleRegen: 0, attacks: [] },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0.1);
+      engine.dispose();
+
+      expect(observedHp).toBe(7);
+      const healed = captured.find((e) => e.kind === "entityHealed");
+      expect(healed).toBeDefined();
+      expect((healed as unknown as { delta: number }).delta).toBe(5);
+      expect((healed as unknown as { hp: number }).hp).toBe(7);
+    });
+
+    it("clamps a heal that would exceed max HP", () => {
+      let observedHp: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe2",
+        register(api) {
+          api.registerSystem({
+            id: "test/fire-overheal",
+            phase: Phase.Effect,
+            reads: ["guard", "health"],
+            writes: ["health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              const heal = ctx.attackEffects.get("heal");
+              if (!heal) return;
+              const target = ctx.world.query({ all: ["guard"] })[0]!;
+              ctx.world.mutate(target.id, "health", () => ({ hp: 8, max: 10 }));
+              heal.apply({
+                tickIndex: ctx.tickIndex,
+                dt: ctx.dt,
+                world: ctx.world,
+                registry: ctx.registry,
+                fire: {
+                  source: { id: "x", position: { x: 0, y: 0 } },
+                  primaryTarget: { id: target.id, position: { x: 0, y: 0 } },
+                  attack: { id: "mend", stats: {} },
+                  effects: [{ kind: "heal", stats: { amount: 5 } }],
+                },
+                effect: { kind: "heal", stats: { amount: 5 } },
+                state: { targets: [target.id], abort: false },
+                emit: () => {},
+              });
+              observedHp = (ctx.world.get(target.id)!.components.get("health") as {
+                hp: number;
+              }).hp;
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": { hp: 10, speed: 0, idleRegen: 0, attacks: [] },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0.1);
+      engine.dispose();
+
+      expect(observedHp).toBe(10);
+    });
+  });
+
   describe("wave-clear heal", () => {
     it("full-heals every surviving Guard on waveCleared", () => {
       let healedHp: number | null = null;
