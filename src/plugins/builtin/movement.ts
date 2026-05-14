@@ -17,7 +17,12 @@ export const movementPlugin: Plugin = {
   id: "movement",
   register(api) {
     api.registerSystem({
-      id: "movement/enemyWalk",
+      // ADR: any entity carrying `pathProgress` is path-walked. Enemies are no
+      // longer the only path-walkers — plugin-authored summons (e.g. a
+      // necromancer's skeletons) reuse the same locomotion by spawning with
+      // pathProgress. Arrival-at-base behaviour (damage + destroy) remains
+      // gated on the `enemy` Component.
+      id: "movement/pathWalk",
       phase: Phase.Simulation,
       reads: ["pathProgress", "statusEffects"],
       writes: ["position", "pathProgress"],
@@ -26,8 +31,8 @@ export const movementPlugin: Plugin = {
         const scenario = (ctx.registry.scenarios as Record<string, any>)[ctx.scenarioId];
         const map = (ctx.registry.maps as Record<string, any>)[scenario.map];
 
-        const enemies = ctx.world.query({ all: ["enemy", "position", "pathProgress"] });
-        for (const e of enemies) {
+        const walkers = ctx.world.query({ all: ["position", "pathProgress"] });
+        for (const e of walkers) {
           const pp = e.components.get("pathProgress") as PathProgress;
           const pos = e.components.get("position") as Position;
           const path = (map.paths as Array<any>).find((p) => p.id === pp.pathId);
@@ -61,7 +66,7 @@ export const movementPlugin: Plugin = {
           ctx.world.mutate(e.id, "position", () => ({ x, y }));
           ctx.world.mutate(e.id, "pathProgress", () => ({ ...pp, wpIndex }));
 
-          if (wpIndex + 1 >= path.waypoints.length) {
+          if (wpIndex + 1 >= path.waypoints.length && e.components.has("enemy")) {
             const baseId = (map.bases as Array<{ id: string; position: Position }>).find(
               (b) => b.position.x === x && b.position.y === y,
             )?.id;
