@@ -117,6 +117,69 @@ describe("Loader: error codes", () => {
     }
   });
 
+  it("UNKNOWN_GAME_RULE — scenario overrides a key no plugin registered", () => {
+    const input: LoaderInput = {
+      ...minimalValid(),
+      scenarios: {
+        tracer: {
+          map: "tracer-map",
+          waves: [],
+          waveTrigger: { kind: "manual" },
+          gameRuleOverrides: { typoedRuleKey: 5 },
+        },
+      },
+    };
+    const r = buildRegistry(input, {
+      knownGameRuleKeys: new Set(["startingGold", "defaultSellRefundPercent"]),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const e = r.errors.find((e) => e.code === "UNKNOWN_GAME_RULE");
+      expect(e).toBeDefined();
+      expect(e!.actual).toBe("typoedRuleKey");
+      expect(e!.path).toContain("gameRuleOverrides");
+    }
+  });
+
+  it("UNKNOWN_GAME_RULE — hint references the registering plugin when supplied", () => {
+    const input: LoaderInput = {
+      ...minimalValid(),
+      scenarios: {
+        tracer: {
+          map: "tracer-map",
+          waves: [],
+          waveTrigger: { kind: "manual" },
+          gameRuleOverrides: { enemyEngagementCap: 2 },
+        },
+      },
+    };
+    const r = buildRegistry(input, {
+      knownGameRuleKeys: new Set(["startingGold"]),
+      knownGameRuleHints: new Map([["enemyEngagementCap", "guards"]]),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const e = r.errors.find((e) => e.code === "UNKNOWN_GAME_RULE")!;
+      expect(e.hint).toContain("guards");
+    }
+  });
+
+  it("UNKNOWN_GAME_RULE — no check runs when knownGameRuleKeys is omitted (back-compat)", () => {
+    const input: LoaderInput = {
+      ...minimalValid(),
+      scenarios: {
+        tracer: {
+          map: "tracer-map",
+          waves: [],
+          waveTrigger: { kind: "manual" },
+          gameRuleOverrides: { typoedRuleKey: 5 },
+        },
+      },
+    };
+    const r = buildRegistry(input);
+    expect(r.ok).toBe(true);
+  });
+
   it("MISSING_REFERENCE — Scenario references unknown Map", () => {
     const reg = buildTracerRegistry();
     (reg.scenarios as any).tracer.map = "no-such-map";

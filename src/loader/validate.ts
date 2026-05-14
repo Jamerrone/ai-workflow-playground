@@ -322,6 +322,24 @@ function validateScenario(ctx: ValidationContext, id: string, raw: Record<string
   if (raw.waveTrigger !== undefined && isObject(raw.waveTrigger)) {
     checkKind(ctx, "waveTrigger", raw.waveTrigger, `${path}.waveTrigger`);
   }
+  const known = ctx.options.knownGameRuleKeys;
+  if (known && isObject(raw.gameRuleOverrides)) {
+    for (const key of Object.keys(raw.gameRuleOverrides)) {
+      if (known.has(key)) continue;
+      const hint = ctx.options.knownGameRuleHints?.get(key);
+      ctx.errors.push({
+        severity: "error",
+        code: "UNKNOWN_GAME_RULE",
+        path: `${path}.gameRuleOverrides.${key}`,
+        message: `Unknown GameRule key '${key}'.`,
+        expected: [...known].sort().join(" | "),
+        actual: key,
+        hint: hint
+          ? `'${key}' is registered by plugin '${hint}' — is it loaded?`
+          : `no plugin known to register this GameRule key.`,
+      });
+    }
+  }
 }
 
 function validateUpgrade(ctx: ValidationContext, id: string, raw: Record<string, unknown>): void {
