@@ -4,11 +4,7 @@
 // (ADR-0013). Helpers operate on entry data; they never throw.
 
 import { isObject } from "./normalize.js";
-import type {
-  BucketValidatorContext,
-  LoaderError,
-  LoaderOptions,
-} from "./types.js";
+import type { BucketValidatorContext } from "./types.js";
 
 // `kind` values known to the built-in plugin bundle. The Loader uses this for
 // the UNKNOWN_KIND error so missing-plugin scenarios surface with a useful
@@ -25,9 +21,6 @@ const BUILTIN_KINDS = new Map<string, ReadonlySet<string>>([
   ["mapFeature", new Set(["blocked-region"])],
   ["rewardKind", new Set(["gold-on-kill", "sell-value", "wave-clear"])],
 ]);
-
-/** Validator-internal addError sink — every helper goes through it. */
-type Push = (e: LoaderError) => void;
 
 export function requireNumber(
   ctx: BucketValidatorContext,
@@ -94,19 +87,9 @@ export function checkKind(
   obj: Record<string, unknown>,
   path: string,
 ): void {
-  pushKindError(obj, registry, path, ctx.options, (e) => ctx.addError(e));
-}
-
-function pushKindError(
-  obj: Record<string, unknown>,
-  registry: string,
-  path: string,
-  options: LoaderOptions,
-  push: Push,
-): void {
   const kind = obj.kind;
   if (typeof kind !== "string") {
-    push({
+    ctx.addError({
       severity: "error",
       code: "INVALID_FIELD",
       path: `${path}.kind`,
@@ -118,8 +101,8 @@ function pushKindError(
   }
   const builtins = BUILTIN_KINDS.get(registry);
   if (builtins?.has(kind)) return;
-  const hint = options.knownKindHints?.get(kind);
-  push({
+  const hint = ctx.options.knownKindHints?.get(kind);
+  ctx.addError({
     severity: "error",
     code: "UNKNOWN_KIND",
     path: `${path}.kind`,
