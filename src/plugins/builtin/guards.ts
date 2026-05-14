@@ -152,7 +152,7 @@ export const guardsPlugin: Plugin = {
     // dies and respawns later gets a new id (not reused).
     let nextGuardSerial = 0;
     const spawnGuard = (
-      ctx: RewardContext | { world: import("../../kernel/world.js").World; tickIndex: number; emit(e: GameEvent): void; registry: import("../../types.js").ConfigRegistry },
+      ctx: RewardContext,
       towerId: string,
       summon: SummonConfig,
       position: Position,
