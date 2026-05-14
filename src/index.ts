@@ -1,8 +1,15 @@
 export { createEngine } from "./kernel/engine.js";
 export { EngineDisposedError } from "./kernel/errors.js";
 export { Phase, PHASE_ORDER } from "./types.js";
-export { buildRegistry, formatLoaderErrors } from "./loader/index.js";
+export {
+  buildRegistry,
+  collectBucketValidators,
+  formatLoaderErrors,
+} from "./loader/index.js";
+export { builtInBundle } from "./plugins/builtin/index.js";
 export type {
+  BucketValidatorContext,
+  BucketValidatorDef,
   LoaderError,
   LoaderErrorSource,
   LoaderInput,

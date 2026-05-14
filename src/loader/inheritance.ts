@@ -15,10 +15,14 @@ export function resolveInheritance(input: LoaderInput): InheritanceResult {
   const abstractIds = new Map<string, Set<string>>();
   for (const bucket of BUCKETS) abstractIds.set(bucket, new Set());
 
+  const inputRecord = input as Record<string, Record<string, unknown> | undefined>;
+  const presentBuckets = Object.keys(inputRecord);
+
   // Pass 1: identify abstract templates so references to them can be flagged later.
-  for (const bucket of BUCKETS) {
-    const entries = input[bucket];
+  for (const bucket of presentBuckets) {
+    const entries = inputRecord[bucket];
     if (!entries) continue;
+    if (!abstractIds.has(bucket)) abstractIds.set(bucket, new Set());
     for (const [id, entry] of Object.entries(entries)) {
       if (isObject(entry) && entry.abstract === true) {
         abstractIds.get(bucket)!.add(id);
@@ -26,10 +30,13 @@ export function resolveInheritance(input: LoaderInput): InheritanceResult {
     }
   }
 
-  // Pass 2: resolve `extends` per entry with cycle detection and cross-kind rejection.
+  // Pass 2: resolve `extends` per entry with cycle detection and cross-kind
+  // rejection. Iterates over every bucket present in the input — including
+  // plugin-contributed custom buckets, so they receive the same inheritance
+  // semantics as built-in buckets.
   const resolved: Record<string, Record<string, unknown>> = {};
-  for (const bucket of BUCKETS) {
-    const entries = input[bucket];
+  for (const bucket of presentBuckets) {
+    const entries = inputRecord[bucket];
     if (!entries) continue;
     const memo = new Map<string, Record<string, unknown> | null>();
     const outBucket: Record<string, unknown> = {};

@@ -7,6 +7,9 @@ import {
   type Plugin,
   type RewardContext,
 } from "../../types.js";
+import { checkKind, requireArray } from "../../loader/validator-helpers.js";
+import { isObject } from "../../loader/normalize.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
 
 interface WaveState {
   nextIndex: number;
@@ -109,9 +112,90 @@ function resolveGroupPaths(
   return fallback();
 }
 
+function validateWave(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const path = ctx.path;
+  requireArray(ctx, raw, "groups", path);
+  if (Array.isArray(raw.groups)) {
+    raw.groups.forEach((g, i) => {
+      if (!isObject(g)) return;
+      const gPath = `${path}.groups[${i}]`;
+      if (typeof g.id !== "string") {
+        ctx.addError({
+          severity: "error",
+          code: "INVALID_FIELD",
+          path: `${gPath}.id`,
+          message: `WaveGroup missing 'id'.`,
+        });
+      }
+      if (typeof g.enemy !== "string") {
+        ctx.addError({
+          severity: "error",
+          code: "INVALID_FIELD",
+          path: `${gPath}.enemy`,
+          message: `WaveGroup missing 'enemy' reference.`,
+        });
+      }
+    });
+  }
+}
+
+function validateScenario(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const id = ctx.id;
+  const path = ctx.path;
+  if (typeof raw.map !== "string") {
+    ctx.addError({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.map`,
+      message: `Scenario '${id}' is missing 'map'.`,
+      expected: "string (map id)",
+      actual: typeof raw.map,
+    });
+  }
+  if (!Array.isArray(raw.waves)) {
+    ctx.addError({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.waves`,
+      message: `Scenario '${id}' is missing 'waves'.`,
+      expected: "array of { id, pathBindings? }",
+      actual: typeof raw.waves,
+    });
+  }
+  if (raw.waveTrigger !== undefined && isObject(raw.waveTrigger)) {
+    checkKind(ctx, "waveTrigger", raw.waveTrigger, `${path}.waveTrigger`);
+  }
+  const known = ctx.options.knownGameRuleKeys;
+  if (known && isObject(raw.gameRuleOverrides)) {
+    for (const key of Object.keys(raw.gameRuleOverrides)) {
+      if (known.has(key)) continue;
+      const hint = ctx.options.knownGameRuleHints?.get(key);
+      ctx.addError({
+        severity: "error",
+        code: "UNKNOWN_GAME_RULE",
+        path: `${path}.gameRuleOverrides.${key}`,
+        message: `Unknown GameRule key '${key}'.`,
+        expected: [...known].sort().join(" | "),
+        actual: key,
+        hint: hint
+          ? `'${key}' is registered by plugin '${hint}' — is it loaded?`
+          : `no plugin known to register this GameRule key.`,
+      });
+    }
+  }
+}
+
 export const wavesPlugin: Plugin = {
   id: "waves",
   register(api) {
+    // Bucket validators contributed by the waves plugin: the Wave JSON shape
+    // and the Scenario JSON shape (Scenarios reference Waves, so the validator
+    // owner lives here rather than in a separate scenarios plugin).
+    api.registerBucketValidator({ bucket: "waves", validate: validateWave });
+    api.registerBucketValidator({ bucket: "scenarios", validate: validateScenario });
+
     // Components owned by the waves plugin.
     api.registerComponent({ name: "enemy", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "health", writableIn: PHASE_ORDER });

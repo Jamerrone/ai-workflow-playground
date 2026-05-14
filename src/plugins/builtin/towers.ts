@@ -13,6 +13,97 @@ import {
   type SellTowerAction,
   type TargetingStrategyConfig,
 } from "../../types.js";
+import {
+  checkKind,
+  requireArray,
+  requireNumber,
+  validateAttackEffectFields,
+} from "../../loader/validator-helpers.js";
+import { isObject } from "../../loader/normalize.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
+
+// AttackEffect kinds that the built-in attack-effects plugin ships with a
+// `damagePreview`. Used by the towers validator to warn when a Tower opts into
+// `highest-damage` attack selection while mounting effects whose registered
+// AttackEffectDef lacks the damagePreview hook.
+const BUILTIN_DAMAGE_PREVIEW_KINDS: ReadonlySet<string> = new Set([
+  "damage",
+  "splash",
+  "pierce",
+  "line-pierce",
+  "bounce",
+  "dot",
+]);
+
+function validateTowers(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const id = ctx.id;
+  const path = ctx.path;
+  requireNumber(ctx, raw, "cost", path);
+  requireArray(ctx, raw, "attacks", path);
+  const isHighestDamage =
+    isObject(raw.attackSelection) && raw.attackSelection.kind === "highest-damage";
+  const damagePreviewKinds = new Set<string>([
+    ...BUILTIN_DAMAGE_PREVIEW_KINDS,
+    ...(ctx.options.damagePreviewKinds ?? []),
+  ]);
+  if (Array.isArray(raw.attacks)) {
+    const seenIds = new Set<string>();
+    raw.attacks.forEach((atk, i) => {
+      if (!isObject(atk)) return;
+      const atkPath = `${path}.attacks[${i}]`;
+      const atkId = typeof atk.id === "string" ? atk.id : undefined;
+      if (atkId === undefined) {
+        ctx.addError({
+          severity: "error",
+          code: "INVALID_FIELD",
+          path: `${atkPath}.id`,
+          message: `Attack missing 'id'.`,
+          expected: "string",
+          actual: typeof atk.id,
+        });
+      } else if (seenIds.has(atkId)) {
+        ctx.addError({
+          severity: "error",
+          code: "INVALID_FIELD",
+          path: `${atkPath}.id`,
+          message: `Duplicate Attack id '${atkId}' on tower '${id}'.`,
+        });
+      } else {
+        seenIds.add(atkId);
+      }
+      if (Array.isArray(atk.effects)) {
+        atk.effects.forEach((eff, j) => {
+          if (!isObject(eff)) return;
+          const effPath = `${atkPath}.effects[${j}]`;
+          checkKind(ctx, "attackEffect", eff, effPath);
+          validateAttackEffectFields(ctx, eff, effPath);
+          if (
+            isHighestDamage &&
+            typeof eff.kind === "string" &&
+            !damagePreviewKinds.has(eff.kind)
+          ) {
+            ctx.addWarning({
+              severity: "warning",
+              code: "DAMAGE_PREVIEW_MISSING",
+              path: `${effPath}.kind`,
+              message: `Tower '${id}' uses attackSelection 'highest-damage' but Attack '${atkId ?? `[${i}]`}' mounts an effect of kind '${eff.kind}' whose AttackEffectDef does not implement 'damagePreview'.`,
+              expected: "effect kind with a registered damagePreview",
+              actual: eff.kind,
+              hint: "Either implement damagePreview on the registering plugin, switch to 'declaration-order' attack selection, or remove the effect.",
+            });
+          }
+        });
+      }
+    });
+  }
+  if (raw.targeting !== undefined && isObject(raw.targeting)) {
+    checkKind(ctx, "targeting", raw.targeting, `${path}.targeting`);
+  }
+  if (raw.attackSelection !== undefined && isObject(raw.attackSelection)) {
+    checkKind(ctx, "attackSelection", raw.attackSelection, `${path}.attackSelection`);
+  }
+}
 
 interface TowerArchetype {
   readonly cost: number;
@@ -46,6 +137,10 @@ interface MapData {
 export const towersPlugin: Plugin = {
   id: "towers",
   register(api) {
+    // Tower JSON bucket validator — required fields, attack uniqueness, and
+    // built-in AttackEffect stat requirements.
+    api.registerBucketValidator({ bucket: "towers", validate: validateTowers });
+
     // Components owned by the towers plugin.
     api.registerComponent({ name: "tower", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "position", writableIn: PHASE_ORDER });

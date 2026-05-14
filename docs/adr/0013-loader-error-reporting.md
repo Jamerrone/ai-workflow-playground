@@ -53,8 +53,33 @@ The engine package consumes an already-assembled in-memory `ConfigRegistry`. The
 
 A separate `loadFromDirectory` utility (Node-only) walks the filesystem, reads raw JSON, builds the registry, and captures source positions populated into `LoaderError.source`. Browser users either static-import their JSON and assemble the registry programmatically, or `fetch` it at runtime and do the same. Browser-side `LoaderError.source` is `undefined` unless the consumer supplies their own source map.
 
+## Plugin-extensible bucket validators
+
+Per-bucket JSON validation is plugin-contributed, not hardcoded in the Loader. Every built-in bucket (Maps, Towers, Enemies, Waves, Scenarios, Upgrades) ships its validator on the same `RegistrationApi.registerBucketValidator(def)` a third-party plugin would call to add a new bucket — `heroes`, `portals`, anything. The Loader's per-entry pass dispatches through `LoaderOptions.bucketValidators`, a `ReadonlyMap<bucket, BucketValidatorDef>` populated by running plugins through `collectBucketValidators(plugins)`.
+
+```ts
+api.registerBucketValidator({
+  bucket: "heroes",
+  validate(ctx) {
+    if (typeof ctx.entry.power !== "number") {
+      ctx.addError({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${ctx.path}.power`,
+        message: `Hero '${ctx.id}' is missing 'power'.`,
+      });
+    }
+  },
+});
+```
+
+`BucketValidatorContext` carries the entry being validated plus the full `input` (for cross-bucket reference checks), the active `LoaderOptions`, the `abstractIds` map, and `addError`/`addWarning` accumulators. Validators never throw — they push structured errors and let the Loader run the rest of the input, preserving the collect-all contract.
+
+The default `buildRegistry` exported from `src/index.ts` injects the built-in plugin bundle's validators when no `bucketValidators` is supplied, so JSON-only callers don't need to wire anything. Callers that ship their own plugin set call `collectBucketValidators(myPlugins)` and pass the result through `LoaderOptions`.
+
 ## Rejected alternatives
 
 - **Throw on first error.** Defensible for programmatic consumers; hostile to JSON-only authors.
 - **String-only errors.** Saves a couple of fields and forecloses every kind of tooling. The default formatter renders structured errors into the same strings anyway.
 - **Errors-only, no warnings.** Forces every soft hint to be either silent or fatal. Real authoring needs the middle category.
+- **Hardcoded `switch` over bucket names in `validate.ts`.** The original Loader dispatched validation through a `switch (bucket) { case "maps": ... }`. It worked, but it singled out a single category of plugin contribution (bucket validators) for special treatment, making built-in buckets unforkable and custom buckets impossible without editing the Loader. Replaced by the plugin-contributed registry above.

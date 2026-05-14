@@ -13,6 +13,9 @@ import {
   matchesFilter,
   entityTags,
 } from "./attack-shared.js";
+import { checkKind, validateAttackEffectFields } from "../../loader/validator-helpers.js";
+import { isObject } from "../../loader/normalize.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
 
 export interface EnemyArchetype {
   readonly tags: readonly string[];
@@ -49,6 +52,87 @@ export const AERIAL_GRUNT: EnemyArchetype = {
 };
 
 
+function validateEnemies(ctx: BucketValidatorContext): void {
+  const raw = ctx.entry;
+  const id = ctx.id;
+  const path = ctx.path;
+  if (!isObject(raw.stats)) {
+    ctx.addError({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.stats`,
+      message: `Enemy '${id}' is missing 'stats'.`,
+      expected: "object",
+      actual: String(raw.stats),
+    });
+  }
+  if (raw.tags !== undefined && !Array.isArray(raw.tags)) {
+    ctx.addError({
+      severity: "error",
+      code: "INVALID_FIELD",
+      path: `${path}.tags`,
+      message: `Enemy '${id}' field 'tags' must be an array of strings.`,
+      expected: "string[]",
+      actual: typeof raw.tags,
+    });
+  }
+  // Enemy archetype Attacks (ADR-0010 / issue #46): same shape as Tower
+  // attacks — id required and unique per archetype, effects validated against
+  // the AttackEffect registry, kind discriminators sanity-checked.
+  if (raw.attacks !== undefined) {
+    if (!Array.isArray(raw.attacks)) {
+      ctx.addError({
+        severity: "error",
+        code: "INVALID_FIELD",
+        path: `${path}.attacks`,
+        message: `Enemy '${id}' field 'attacks' must be an array.`,
+        expected: "Attack[]",
+        actual: typeof raw.attacks,
+      });
+    } else {
+      const seenIds = new Set<string>();
+      raw.attacks.forEach((atk, i) => {
+        if (!isObject(atk)) return;
+        const atkPath = `${path}.attacks[${i}]`;
+        const atkId = typeof atk.id === "string" ? atk.id : undefined;
+        if (atkId === undefined) {
+          ctx.addError({
+            severity: "error",
+            code: "INVALID_FIELD",
+            path: `${atkPath}.id`,
+            message: `Attack missing 'id'.`,
+            expected: "string",
+            actual: typeof atk.id,
+          });
+        } else if (seenIds.has(atkId)) {
+          ctx.addError({
+            severity: "error",
+            code: "INVALID_FIELD",
+            path: `${atkPath}.id`,
+            message: `Duplicate Attack id '${atkId}' on enemy '${id}'.`,
+          });
+        } else {
+          seenIds.add(atkId);
+        }
+        if (Array.isArray(atk.effects)) {
+          atk.effects.forEach((eff, j) => {
+            if (!isObject(eff)) return;
+            const effPath = `${atkPath}.effects[${j}]`;
+            checkKind(ctx, "attackEffect", eff, effPath);
+            validateAttackEffectFields(ctx, eff, effPath);
+          });
+        }
+      });
+    }
+  }
+  if (raw.targeting !== undefined && isObject(raw.targeting)) {
+    checkKind(ctx, "targeting", raw.targeting, `${path}.targeting`);
+  }
+  if (raw.attackSelection !== undefined && isObject(raw.attackSelection)) {
+    checkKind(ctx, "attackSelection", raw.attackSelection, `${path}.attackSelection`);
+  }
+}
+
 // The waves plugin owns the runtime Enemy lifecycle (Components / spawn). The
 // enemies plugin contributes:
 //   - the `enemy` EntityKind
@@ -58,6 +142,8 @@ export const AERIAL_GRUNT: EnemyArchetype = {
 export const enemiesPlugin: Plugin = {
   id: "enemies",
   register(api) {
+    api.registerBucketValidator({ bucket: "enemies", validate: validateEnemies });
+
     api.registerEntityKind({
       kind: "enemy",
       components: [
