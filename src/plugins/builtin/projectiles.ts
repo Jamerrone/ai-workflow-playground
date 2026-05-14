@@ -89,7 +89,7 @@ export const projectilesPlugin: Plugin = {
     api.registerSystem({
       id: "projectiles/flight",
       phase: Phase.Simulation,
-      after: ["combat/fire", "movement/enemyWalk"],
+      after: ["combat/fire", "movement/pathWalk"],
       reads: ["projectile", "position"],
       writes: ["projectile", "position", "pendingFires"],
       run(ctx) {
