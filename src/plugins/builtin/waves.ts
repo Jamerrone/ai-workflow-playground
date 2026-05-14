@@ -113,7 +113,7 @@ export const wavesPlugin: Plugin = {
   register(api) {
     // Components owned by the waves plugin.
     api.registerComponent({ name: "enemy", writableIn: PHASE_ORDER });
-    api.registerComponent({ name: "health", writableIn: [Phase.Effect, Phase.Wave] });
+    api.registerComponent({ name: "health", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "pathProgress", writableIn: [Phase.Simulation, Phase.Wave] });
     api.registerComponent({ name: "waveState", writableIn: PHASE_ORDER });
 

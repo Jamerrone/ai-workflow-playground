@@ -27,6 +27,7 @@ export interface LoaderInput {
   readonly maps?: Record<string, unknown>;
   readonly towers?: Record<string, unknown>;
   readonly enemies?: Record<string, unknown>;
+  readonly summons?: Record<string, unknown>;
   readonly waves?: Record<string, unknown>;
   readonly scenarios?: Record<string, unknown>;
   readonly upgrades?: Record<string, unknown>;
@@ -59,6 +60,7 @@ export const BUCKETS = [
   "maps",
   "towers",
   "enemies",
+  "summons",
   "waves",
   "scenarios",
   "upgrades",

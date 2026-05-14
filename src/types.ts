@@ -4,6 +4,7 @@ export interface ConfigRegistry {
   maps: Record<string, unknown>;
   towers: Record<string, unknown>;
   enemies: Record<string, unknown>;
+  summons: Record<string, unknown>;
   waves: Record<string, unknown>;
   scenarios: Record<string, unknown>;
   upgrades: Record<string, unknown>;

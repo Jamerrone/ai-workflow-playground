@@ -44,6 +44,7 @@ export function buildTracerRegistry(): ConfigRegistry {
         killReward: 10,
       },
     },
+    summons: {},
     waves: {
       "w1": {
         groups: [
