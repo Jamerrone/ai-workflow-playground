@@ -9,6 +9,8 @@ import {
   type Plugin,
   type Position,
   type RewardContext,
+  type UpgradeOpContext,
+  type UpgradeOpDef,
 } from "../../types.js";
 
 interface SummonConfig {
@@ -59,8 +61,43 @@ export const guardsPlugin: Plugin = {
     api.registerComponent({ name: "rallyPoint", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "parent", writableIn: PHASE_ORDER });
     api.registerComponent({ name: "engagement", writableIn: PHASE_ORDER });
+    api.registerComponent({ name: "guardModifiers", writableIn: PHASE_ORDER });
 
     api.registerGameRule({ key: "enemyEngagementCap", default: 3 });
+
+    const guardModifierOp: UpgradeOpDef = {
+      kind: "guardModifier",
+      validate(op) {
+        const o = op as {
+          attackId?: unknown;
+          effectKind?: unknown;
+          field?: unknown;
+          delta?: unknown;
+        };
+        if (typeof o.attackId !== "string") return { ok: false, reason: "missing 'attackId'" };
+        if (typeof o.effectKind !== "string") return { ok: false, reason: "missing 'effectKind'" };
+        if (typeof o.field !== "string") return { ok: false, reason: "missing 'field'" };
+        if (typeof o.delta !== "number") return { ok: false, reason: "missing numeric 'delta'" };
+        return { ok: true };
+      },
+      apply(ctx: UpgradeOpContext) {
+        const op = ctx.op as {
+          attackId: string;
+          effectKind: string;
+          field: string;
+          delta: number;
+        };
+        const existing =
+          (ctx.tower.components.get("guardModifiers") as
+            | ReadonlyArray<unknown>
+            | undefined) ?? [];
+        ctx.world.mutate(ctx.tower.id, "guardModifiers", () => [
+          ...existing,
+          { ...op },
+        ]);
+      },
+    };
+    api.registerUpgradeOp(guardModifierOp);
 
     const healEffect: AttackEffectDef = {
       kind: "heal",
@@ -100,25 +137,42 @@ export const guardsPlugin: Plugin = {
 
     api.registerEntityKind({
       kind: "guard",
-      components: ["guard", "position", "health", "rallyPoint", "parent"],
+      components: [
+        "guard",
+        "position",
+        "health",
+        "rallyPoint",
+        "parent",
+        "attacks",
+        "cooldownTimer",
+      ],
     });
 
     // Lazy id allocator: monotonically increasing per Tower, so a Guard that
     // dies and respawns later gets a new id (not reused).
     let nextGuardSerial = 0;
     const spawnGuard = (
-      ctx: RewardContext | { world: import("../../kernel/world.js").World; tickIndex: number; emit(e: GameEvent): void },
+      ctx: RewardContext | { world: import("../../kernel/world.js").World; tickIndex: number; emit(e: GameEvent): void; registry: import("../../types.js").ConfigRegistry },
       towerId: string,
       summon: SummonConfig,
       position: Position,
     ): string => {
       const guardId = `guard:${towerId}:${nextGuardSerial++}`;
+      const summonsBucket = ctx.registry.summons as Record<
+        string,
+        { hp?: number; attacks?: ReadonlyArray<unknown> } | undefined
+      >;
+      const archetype = summonsBucket[summon.summons];
+      const hp = archetype?.hp ?? 10;
+      const attacks = archetype?.attacks ?? [];
       ctx.world.spawn(guardId, {
         guard: { archetype: summon.summons },
         position: { x: position.x, y: position.y },
-        health: { hp: 10, max: 10 },
+        health: { hp, max: hp },
         rallyPoint: { x: position.x, y: position.y },
         parent: { tower: towerId },
+        attacks: structuredClone(attacks) as unknown[],
+        cooldownTimer: { remaining: 0 },
       });
       ctx.emit({
         kind: "guardSpawned",
@@ -293,6 +347,114 @@ export const guardsPlugin: Plugin = {
           } else {
             ctx.world.mutate(g.id, "engagement", () => ({ enemy: undefined }));
           }
+        }
+      },
+    });
+
+    // Guard combat: each Guard with an engagement and an off-cooldown Attack
+    // whose range covers the engaged Enemy fires it. Damage flows through the
+    // AttackEffect registry just like Tower attacks.
+    api.registerSystem({
+      id: "guards/attack",
+      phase: Phase.Simulation,
+      reads: ["guard", "engagement", "position", "attacks", "cooldownTimer"],
+      writes: ["cooldownTimer"],
+      after: ["guards/engagement"],
+      run(ctx) {
+        for (const g of ctx.world.query({
+          all: ["guard", "engagement", "position", "attacks", "cooldownTimer"],
+        })) {
+          const eng = g.components.get("engagement") as { enemy?: string };
+          if (!eng.enemy) continue;
+          const enemy = ctx.world.get(eng.enemy);
+          if (!enemy) continue;
+          const cd = g.components.get("cooldownTimer") as { remaining: number };
+          const newRemaining = Math.max(0, cd.remaining - ctx.dt);
+          if (newRemaining > 0) {
+            ctx.world.mutate(g.id, "cooldownTimer", () => ({
+              remaining: newRemaining,
+            }));
+            continue;
+          }
+          const attacks = g.components.get("attacks") as ReadonlyArray<{
+            id: string;
+            stats: { range: number; cooldown: number };
+            effects: ReadonlyArray<{
+              kind: string;
+              id?: string;
+              stats?: Record<string, unknown>;
+            }>;
+          }>;
+          const gPos = g.components.get("position") as Position;
+          const ePos = enemy.components.get("position") as Position;
+          const dx = ePos.x - gPos.x;
+          const dy = ePos.y - gPos.y;
+          const distSq = dx * dx + dy * dy;
+          const fired = attacks.find(
+            (a) => distSq <= a.stats.range * a.stats.range,
+          );
+          if (!fired) {
+            ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: 0 }));
+            continue;
+          }
+          // Live-resolve modifiers from the parent Tower. Buffs are stored on
+          // the Tower, not copied onto each Guard, so the same `guardModifiers`
+          // entry applies to currently-living and yet-unborn Guards alike.
+          const parent = g.components.get("parent") as { tower: string };
+          const tower = ctx.world.get(parent.tower);
+          const modifiers =
+            (tower?.components.get("guardModifiers") as
+              | ReadonlyArray<{
+                  attackId: string;
+                  effectKind: string;
+                  field: string;
+                  delta: number;
+                }>
+              | undefined) ?? [];
+          const resolvedEffects = fired.effects.map((effect) => {
+            const applicable = modifiers.filter(
+              (m) => m.attackId === fired.id && m.effectKind === effect.kind,
+            );
+            if (applicable.length === 0) return effect;
+            const stats = { ...(effect.stats ?? {}) } as Record<string, unknown>;
+            for (const m of applicable) {
+              const base = typeof stats[m.field] === "number" ? (stats[m.field] as number) : 0;
+              stats[m.field] = base + m.delta;
+            }
+            return { ...effect, stats };
+          });
+          const fire = {
+            source: { id: g.id, position: { ...gPos } },
+            primaryTarget: { id: enemy.id, position: { ...ePos } },
+            attack: { id: fired.id, stats: fired.stats },
+            effects: resolvedEffects,
+          };
+          const state = { targets: [enemy.id], abort: false };
+          for (const effect of resolvedEffects) {
+            if (state.abort) break;
+            const def = ctx.attackEffects.get(effect.kind);
+            if (!def) continue;
+            def.apply({
+              tickIndex: ctx.tickIndex,
+              dt: ctx.dt,
+              world: ctx.world,
+              registry: ctx.registry,
+              fire,
+              effect,
+              state,
+              emit: ctx.emit,
+            });
+          }
+          ctx.world.mutate(g.id, "cooldownTimer", () => ({
+            remaining: fired.stats.cooldown,
+          }));
+          ctx.emit({
+            kind: "guardAttacked",
+            tick: ctx.tickIndex,
+            guard: g.id,
+            enemy: enemy.id,
+            attackId: fired.id,
+          });
         }
       },
     });

@@ -333,6 +333,237 @@ describe("guards plugin: skeleton", () => {
     expect(samples[2]).toEqual([5]);
   });
 
+  describe("guardModifier UpgradeOp", () => {
+    it("buffs every living Guard's Attack damage immediately, and new spawns inherit", () => {
+      const damageEvents: GameEvent[] = [];
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/inject-and-kill",
+            phase: Phase.Wave,
+            reads: ["guard"],
+            writes: ["enemy", "position", "health"],
+            run(ctx) {
+              // Tick 0: inject an enemy.
+              if (ctx.tickIndex === 0) {
+                ctx.world.spawn("e:1", {
+                  enemy: { archetype: "grunt", tags: [] },
+                  position: { x: 3, y: 1 },
+                  health: { hp: 100, max: 100 },
+                });
+              }
+              // Tick 4: kill the surviving guards to force a respawn.
+              if (ctx.tickIndex === 4) {
+                for (const g of ctx.world.query({ all: ["guard"] })) {
+                  const tower = (
+                    g.components.get("parent") as { tower: string }
+                  ).tower;
+                  ctx.world.destroy(g.id);
+                  ctx.emit({
+                    kind: "guardDied",
+                    tick: ctx.tickIndex,
+                    guard: g.id,
+                    tower,
+                  });
+                }
+                ctx.world.destroy("e:1");
+                ctx.world.spawn("e:2", {
+                  enemy: { archetype: "grunt", tags: [] },
+                  position: { x: 2, y: 1 },
+                  health: { hp: 100, max: 100 },
+                });
+              }
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            upgradeTree: ["buff"],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 2,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        upgrades: {
+          buff: {
+            cost: 0,
+            ops: [
+              {
+                kind: "guardModifier",
+                attackId: "stab",
+                effectKind: "damage",
+                field: "amount",
+                delta: 5,
+              },
+            ],
+          },
+        },
+        summons: {
+          "guard-footman": {
+            hp: 10,
+            speed: 0,
+            idleRegen: 0,
+            attacks: [
+              {
+                id: "stab",
+                stats: { range: 5, cooldown: 1 },
+                effects: [{ kind: "damage", stats: { amount: 3 } }],
+              },
+            ],
+          },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.onEvent((e) => {
+        if (e.kind === "damageApplied") damageEvents.push(e);
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      // Purchase upgrade BEFORE first tick → buffs the living guard.
+      const upRes = engine.purchaseUpgrade("tower:barracks:1,1", "buff");
+      expect(upRes.ok).toBe(true);
+
+      engine.tick(1); // tick 0: enemy injected, guard fires, expects 8 damage
+      const firstDamage = damageEvents
+        .filter((e) => (e as unknown as { target: string }).target === "e:1")
+        .at(0);
+      expect(
+        (firstDamage as unknown as { amount: number } | undefined)?.amount,
+      ).toBe(8);
+
+      // Kill the guard at tick 4, advance to respawn.
+      engine.tick(1); // 1
+      engine.tick(1); // 2
+      engine.tick(1); // 3
+      engine.tick(1); // 4: kill + inject e:2
+      // Respawn happens 2s later — give plenty of time.
+      engine.tick(1); // 5
+      engine.tick(1); // 6 — respawn fires
+      engine.tick(1); // 7 — new guard engages, hits e:2 with 8 damage
+      engine.dispose();
+
+      const secondDamage = damageEvents
+        .filter((e) => (e as unknown as { target: string }).target === "e:2")
+        .at(0);
+      expect(
+        (secondDamage as unknown as { amount: number } | undefined)?.amount,
+      ).toBe(8);
+    });
+  });
+
+  describe("guard combat", () => {
+    it("fires a Guard Attack at the engaged Enemy and applies damage", () => {
+      let enemyHp: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/inject-enemy",
+            phase: Phase.Wave,
+            reads: [],
+            writes: ["enemy", "position", "health"],
+            run(ctx) {
+              if (ctx.tickIndex !== 0) return;
+              ctx.world.spawn("e:1", {
+                enemy: { archetype: "grunt", tags: [] },
+                position: { x: 3, y: 1 },
+                health: { hp: 10, max: 10 },
+              });
+            },
+          });
+          api.registerSystem({
+            id: "test/peek-enemy",
+            phase: Phase.Emit,
+            reads: ["enemy", "health"],
+            writes: [],
+            run(ctx) {
+              const e = ctx.world.get("e:1");
+              const h = e?.components.get("health") as { hp: number } | undefined;
+              if (h) enemyHp = h.hp;
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": {
+            hp: 10,
+            speed: 0,
+            idleRegen: 0,
+            attacks: [
+              {
+                id: "stab",
+                stats: { range: 5, cooldown: 1 },
+                effects: [{ kind: "damage", stats: { amount: 3 } }],
+              },
+            ],
+          },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0.5); // tick 0: inject, engage, fire (cooldown 1 → fires once)
+      engine.dispose();
+
+      expect(enemyHp).toBe(7);
+    });
+  });
+
   describe("heal AttackEffect", () => {
     it("raises target HP, clamps at max, and emits entityHealed", () => {
       const captured: GameEvent[] = [];
