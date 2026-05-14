@@ -8,6 +8,7 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
+import { matchesFilter } from "./attack-shared.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
@@ -17,19 +18,6 @@ function dist(a: Position, b: Position): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-function matchesFilter(
-  tags: readonly string[],
-  filter?: { require?: readonly string[]; exclude?: readonly string[] },
-): boolean {
-  if (!filter) return true;
-  if (filter.require && filter.require.length > 0) {
-    if (!filter.require.every((t) => tags.includes(t))) return false;
-  }
-  if (filter.exclude && filter.exclude.length > 0) {
-    if (filter.exclude.some((t) => tags.includes(t))) return false;
-  }
-  return true;
-}
 
 export const combatPlugin: Plugin = {
   id: "combat",

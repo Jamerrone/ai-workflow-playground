@@ -1,6 +1,5 @@
 import {
   Phase,
-  type AttackEffectConfig,
   type AttackSelectionCandidate,
   type AttackSelectionStrategyConfig,
   type Plugin,
@@ -9,6 +8,11 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
+import {
+  type AttackData,
+  matchesFilter,
+  entityTags,
+} from "./attack-shared.js";
 
 export interface EnemyArchetype {
   readonly tags: readonly string[];
@@ -21,16 +25,6 @@ export interface EnemyArchetype {
   readonly attacks?: ReadonlyArray<AttackData>;
   readonly attackSelection?: AttackSelectionStrategyConfig;
   readonly targeting?: TargetingStrategyConfig;
-}
-
-interface AttackData {
-  readonly id: string;
-  readonly stats: { readonly range: number; readonly cooldown: number };
-  readonly effects: ReadonlyArray<AttackEffectConfig>;
-  readonly targetFilter?: {
-    readonly require?: readonly string[];
-    readonly exclude?: readonly string[];
-  };
 }
 
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest" };
@@ -54,29 +48,6 @@ export const AERIAL_GRUNT: EnemyArchetype = {
   killReward: 8,
 };
 
-function matchesFilter(
-  tags: readonly string[],
-  filter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] },
-): boolean {
-  if (!filter) return true;
-  if (filter.require && filter.require.length > 0) {
-    if (!filter.require.every((t) => tags.includes(t))) return false;
-  }
-  if (filter.exclude && filter.exclude.length > 0) {
-    if (filter.exclude.some((t) => tags.includes(t))) return false;
-  }
-  return true;
-}
-
-function entityTags(
-  components: ReadonlyMap<string, unknown>,
-): readonly string[] {
-  for (const name of ["enemy", "guard"]) {
-    const c = components.get(name) as { tags?: readonly string[] } | undefined;
-    if (c?.tags) return c.tags;
-  }
-  return [];
-}
 
 // The waves plugin owns the runtime Enemy lifecycle (Components / spawn). The
 // enemies plugin contributes:
@@ -231,13 +202,8 @@ export const enemiesPlugin: Plugin = {
             | undefined;
           const remaining = cd?.remaining ?? 0;
           const newRemaining = Math.max(0, remaining - ctx.dt);
-          if (newRemaining > 0) {
-            ctx.world.mutate(e.id, "cooldownTimer", () => ({
-              remaining: newRemaining,
-            }));
-            continue;
-          }
-          ctx.world.mutate(e.id, "cooldownTimer", () => ({ remaining: 0 }));
+          ctx.world.mutate(e.id, "cooldownTimer", () => ({ remaining: newRemaining }));
+          if (newRemaining > 0) continue;
 
           const attacks = e.components.get("attacks") as ReadonlyArray<AttackData>;
           const ePos = e.components.get("position") as Position;
