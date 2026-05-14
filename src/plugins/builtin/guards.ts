@@ -123,6 +123,26 @@ export const guardsPlugin: Plugin = {
       },
     });
 
+    // On waveCleared, every surviving Guard heals to max.
+    api.registerReward({
+      kind: "guards/wave-clear-heal",
+      eventKind: "waveCleared",
+      apply(ctx: RewardContext) {
+        for (const g of ctx.world.query({ all: ["guard", "health"] })) {
+          const h = g.components.get("health") as { hp: number; max: number };
+          if (h.hp >= h.max) continue;
+          ctx.world.mutate(g.id, "health", () => ({ ...h, hp: h.max }));
+          ctx.emit({
+            kind: "entityHealed",
+            tick: ctx.tickIndex,
+            entity: g.id,
+            delta: h.max - h.hp,
+            hp: h.max,
+          });
+        }
+      },
+    });
+
     // On Guard death, mark its slot for sequential respawn on the parent Tower.
     api.registerReward({
       kind: "guards/track-death",
