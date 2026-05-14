@@ -5,7 +5,7 @@ to be merged into `{{TARGET_BRANCH}}`.
 
 ## Issue
 
-- ID: {{TASK_ID}}
+- ID: {{ISSUE_NUMBER}}
 - Title: {{ISSUE_TITLE}}
 
 ## Commits on this branch (vs `{{TARGET_BRANCH}}`)
