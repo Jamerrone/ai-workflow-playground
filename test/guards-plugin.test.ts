@@ -240,6 +240,90 @@ describe("guards plugin: skeleton", () => {
     engine2.dispose();
   });
 
+  it("walks each guard toward its parent Tower's rallyPoint at `speed` tiles/sec", () => {
+    const samples: number[][] = [];
+    const probe: Plugin = {
+      id: "test/probe",
+      register(api) {
+        // Move the rally point on tick 0 so we observe locomotion.
+        api.registerSystem({
+          id: "test/move-rally",
+          phase: Phase.Simulation,
+          reads: ["tower", "rallyPoint"],
+          writes: ["rallyPoint"],
+          before: ["guards/locomotion"],
+          run(ctx) {
+            if (ctx.tickIndex !== 0) return;
+            for (const t of ctx.world.query({ all: ["tower", "rallyPoint"] })) {
+              ctx.world.mutate(t.id, "rallyPoint", () => ({ x: 5, y: 1 }));
+            }
+          },
+        });
+        api.registerSystem({
+          id: "test/peek-positions",
+          phase: Phase.Emit,
+          reads: ["guard", "position"],
+          writes: [],
+          after: ["test/move-rally"],
+          run(ctx) {
+            const xs = ctx.world
+              .query({ all: ["guard"] })
+              .map((g) => (g.components.get("position") as { x: number }).x);
+            samples.push(xs);
+          },
+        });
+      },
+    };
+
+    const registry = {
+      ...emptyRegistry(),
+      maps: {
+        m: {
+          width: 7,
+          height: 3,
+          paths: [],
+          bases: [],
+          placementMode: { kind: "fixed" },
+          towerSlots: [{ x: 1, y: 1 }],
+        },
+      },
+      towers: {
+        barracks: {
+          cost: 0,
+          attacks: [],
+          components: {
+            summon: {
+              summons: "guard-footman",
+              maxCount: 1,
+              respawnCooldown: 5,
+              rallyPointRange: 10,
+            },
+          },
+        },
+      },
+      summons: {
+        "guard-footman": { hp: 10, speed: 2, idleRegen: 0, attacks: [] },
+      },
+      scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+    };
+    const engine = createEngine(registry, {
+      plugins: [...builtInBundle, probe],
+      seed: 0,
+    });
+    engine.loadScenario("s");
+    engine.placeTower("barracks", { x: 1, y: 1 });
+
+    engine.tick(1); // tick 0: rally moves to (5,1); guard at x=1, walks +2, now x=3
+    engine.tick(1); // tick 1: x = 5 (arrives, clamps)
+    engine.tick(1); // tick 2: stays at 5
+    engine.dispose();
+
+    expect(samples).toHaveLength(3);
+    expect(samples[0]).toEqual([3]);
+    expect(samples[1]).toEqual([5]);
+    expect(samples[2]).toEqual([5]);
+  });
+
   it("registers `summon` Component (config attached to Tower archetypes)", () => {
     let captured: SystemContext | null = null;
     const probe: Plugin = {

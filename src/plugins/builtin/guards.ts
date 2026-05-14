@@ -112,6 +112,47 @@ export const guardsPlugin: Plugin = {
       },
     });
 
+    // Continuous Euclidean locomotion: each Guard advances `speed * dt` along
+    // the straight-line vector toward its parent Tower's current Rally Point.
+    // Clamps to the destination once within one step.
+    api.registerSystem({
+      id: "guards/locomotion",
+      phase: Phase.Simulation,
+      reads: ["guard", "position", "parent"],
+      writes: ["position"],
+      run(ctx) {
+        const summonsBucket = ctx.registry.summons as Record<
+          string,
+          { speed?: number } | undefined
+        >;
+        for (const g of ctx.world.query({ all: ["guard", "position", "parent"] })) {
+          const parent = g.components.get("parent") as { tower: string };
+          const tower = ctx.world.get(parent.tower);
+          const rally = tower?.components.get("rallyPoint") as Position | undefined;
+          if (!rally) continue;
+          const pos = g.components.get("position") as Position;
+          const archetypeId = (g.components.get("guard") as { archetype: string })
+            .archetype;
+          const speed = summonsBucket[archetypeId]?.speed ?? 0;
+          if (speed <= 0) continue;
+          const dx = rally.x - pos.x;
+          const dy = rally.y - pos.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq === 0) continue;
+          const step = speed * ctx.dt;
+          if (step * step >= distSq) {
+            ctx.world.mutate(g.id, "position", () => ({ x: rally.x, y: rally.y }));
+            continue;
+          }
+          const dist = Math.sqrt(distSq);
+          ctx.world.mutate(g.id, "position", () => ({
+            x: pos.x + (dx / dist) * step,
+            y: pos.y + (dy / dist) * step,
+          }));
+        }
+      },
+    });
+
     // Per-Tower respawn timer: advances only when there's a pending respawn.
     // On expiry, exactly one Guard spawns and the timer resets — one-at-a-time
     // even when multiple Guards died in the same tick.
