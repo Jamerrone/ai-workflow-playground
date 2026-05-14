@@ -333,6 +333,39 @@ describe("guards plugin: skeleton", () => {
     expect(samples[2]).toEqual([5]);
   });
 
+  describe("sell despawns guards", () => {
+    it("destroys every Guard parented to a Tower when that Tower is sold", () => {
+      let aliveBefore: number | null = null;
+      let aliveAfter: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/peek-guards",
+            phase: Phase.Emit,
+            reads: ["guard"],
+            writes: [],
+            run(ctx) {
+              const n = ctx.world.query({ all: ["guard"] }).length;
+              if (ctx.tickIndex === 0) aliveBefore = n;
+              if (ctx.tickIndex === 1) aliveAfter = n;
+            },
+          });
+        },
+      };
+      const engine = setupBarracksScenario(probe);
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(0); // tick 0: probe sees 3 alive
+      const result = engine.sellTower("tower:barracks:1,1");
+      expect(result.ok).toBe(true);
+      engine.tick(0); // tick 1: probe sees 0 alive
+      engine.dispose();
+
+      expect(aliveBefore).toBe(3);
+      expect(aliveAfter).toBe(0);
+    });
+  });
+
   describe("guardModifier UpgradeOp", () => {
     it("buffs every living Guard's Attack damage immediately, and new spawns inherit", () => {
       const damageEvents: GameEvent[] = [];
