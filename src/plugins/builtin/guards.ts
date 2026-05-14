@@ -235,6 +235,30 @@ export const guardsPlugin: Plugin = {
       },
     });
 
+    // When a Tower is sold, every Guard parented to it is destroyed in the same
+    // tick. No respawns: the Tower itself is gone, so there is no summonState
+    // to advance.
+    api.registerReward({
+      kind: "guards/sell-despawn",
+      eventKind: "towerSold",
+      apply(ctx: RewardContext, event: GameEvent) {
+        const towerId = (event as { tower?: string }).tower;
+        if (!towerId) return;
+        for (const g of ctx.world.query({ all: ["guard", "parent"] })) {
+          const parent = g.components.get("parent") as { tower: string };
+          if (parent.tower !== towerId) continue;
+          ctx.world.destroy(g.id);
+          ctx.emit({
+            kind: "guardDespawned",
+            tick: ctx.tickIndex,
+            guard: g.id,
+            tower: towerId,
+            reason: "sold",
+          });
+        }
+      },
+    });
+
     // On Guard death, mark its slot for sequential respawn on the parent Tower.
     api.registerReward({
       kind: "guards/track-death",
