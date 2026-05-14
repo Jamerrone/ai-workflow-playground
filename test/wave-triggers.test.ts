@@ -40,6 +40,7 @@ function buildTriggerRegistry(waveTrigger: { kind: string; cooldown?: number }):
         killReward: 0,
       },
     },
+    summons: {},
     waves: {
       w1: {
         groups: [{ id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 }],

@@ -207,6 +207,7 @@ describe("Slice 11: multi-path Scenarios", () => {
           killReward: 0,
         },
       },
+      summons: {},
       waves: {
         mixed: {
           groups: [
@@ -343,6 +344,7 @@ describe("Slice 11: tag-vocabulary consistency", () => {
           killReward: 0,
         },
       },
+      summons: {},
       waves: {
         mixed: {
           groups: [

@@ -95,12 +95,19 @@ export interface OverrideTargetingAction extends PlayerActionBase {
   readonly strategy: string | TargetingStrategyConfig;
 }
 
+export interface MoveRallyPointAction extends PlayerActionBase {
+  readonly kind: "moveRallyPoint";
+  readonly tower: string;
+  readonly position: Position;
+}
+
 export type PlayerAction =
   | PlaceTowerAction
   | SendNextWaveAction
   | PurchaseUpgradeAction
   | SellTowerAction
   | OverrideTargetingAction
+  | MoveRallyPointAction
   | PlayerActionBase;
 
 export interface PlacementValidationResult {

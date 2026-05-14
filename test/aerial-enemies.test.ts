@@ -69,6 +69,7 @@ function buildAerialRegistry(): ConfigRegistry {
       grunt: GROUND_GRUNT,
       bat: AERIAL_GRUNT,
     },
+    summons: {},
     waves: {
       ground: {
         groups: [{ id: "g", enemy: "grunt", count: 1, interval: 0, delay: 0 }],
