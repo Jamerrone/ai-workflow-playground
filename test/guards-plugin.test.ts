@@ -333,6 +333,88 @@ describe("guards plugin: skeleton", () => {
     expect(samples[2]).toEqual([5]);
   });
 
+  describe("wave-clear heal", () => {
+    it("full-heals every surviving Guard on waveCleared", () => {
+      let healedHp: number | null = null;
+      const probe: Plugin = {
+        id: "test/probe",
+        register(api) {
+          api.registerSystem({
+            id: "test/damage-then-clear",
+            phase: Phase.Wave,
+            reads: ["guard"],
+            writes: ["health"],
+            run(ctx) {
+              if (ctx.tickIndex === 0) {
+                for (const g of ctx.world.query({ all: ["guard"] })) {
+                  ctx.world.mutate(g.id, "health", () => ({ hp: 1, max: 10 }));
+                }
+              }
+              if (ctx.tickIndex === 1) {
+                ctx.emit({ kind: "waveCleared", tick: ctx.tickIndex });
+              }
+            },
+          });
+          api.registerSystem({
+            id: "test/peek-hp",
+            phase: Phase.Wave,
+            reads: ["guard", "health"],
+            writes: [],
+            run(ctx) {
+              if (ctx.tickIndex !== 2) return;
+              const guards = ctx.world.query({ all: ["guard"] });
+              healedHp = (guards[0]?.components.get("health") as { hp: number })
+                .hp;
+            },
+          });
+        },
+      };
+      const registry = {
+        ...emptyRegistry(),
+        maps: {
+          m: {
+            width: 5,
+            height: 3,
+            paths: [],
+            bases: [],
+            placementMode: { kind: "fixed" },
+            towerSlots: [{ x: 1, y: 1 }],
+          },
+        },
+        towers: {
+          barracks: {
+            cost: 0,
+            attacks: [],
+            components: {
+              summon: {
+                summons: "guard-footman",
+                maxCount: 1,
+                respawnCooldown: 5,
+                rallyPointRange: 10,
+              },
+            },
+          },
+        },
+        summons: {
+          "guard-footman": { hp: 10, speed: 0, idleRegen: 0, attacks: [] },
+        },
+        scenarios: { s: { map: "m", waves: [], waveTrigger: { kind: "manual" } } },
+      };
+      const engine = createEngine(registry, {
+        plugins: [...builtInBundle, probe],
+        seed: 0,
+      });
+      engine.loadScenario("s");
+      engine.placeTower("barracks", { x: 1, y: 1 });
+      engine.tick(1); // tick 0: damage to 1
+      engine.tick(1); // tick 1: waveCleared emitted → heal in flushEvents
+      engine.tick(1); // tick 2: peek
+      engine.dispose();
+
+      expect(healedHp).toBe(10);
+    });
+  });
+
   describe("idle regen", () => {
     it("regenerates idleRegen HP/sec while not engaged; caps at max; pauses when engaged", () => {
       const hpSamples: number[] = [];
