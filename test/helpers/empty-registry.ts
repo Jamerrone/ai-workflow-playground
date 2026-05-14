@@ -7,6 +7,7 @@ export function emptyRegistry(): ConfigRegistry {
     maps: {},
     towers: {},
     enemies: {},
+    summons: {},
     waves: {},
     scenarios: {},
     upgrades: {},

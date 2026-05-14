@@ -23,6 +23,12 @@ interface TowerArchetype {
     readonly stats: { readonly range: number; readonly cooldown: number };
     readonly effects: ReadonlyArray<{ readonly kind: string; readonly stats?: { readonly amount?: number } }>;
   }>;
+  /**
+   * Optional plugin-contributed Components attached to the entity on placement.
+   * Lets any plugin extend Tower entities through JSON without engine changes
+   * (e.g. guards plugin's `summon` Component on Barracks-style Towers).
+   */
+  readonly components?: Readonly<Record<string, unknown>>;
 }
 
 interface UpgradeArchetype {
@@ -140,6 +146,9 @@ export const towersPlugin: Plugin = {
           attacks: structuredClone(towerDef.attacks),
           purchasedUpgrades: [] as string[],
           targeting: { ...initialTargeting },
+          ...(towerDef.components
+            ? (structuredClone(towerDef.components) as Record<string, unknown>)
+            : {}),
         });
         const newGold = goldComp.amount - towerDef.cost;
         ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount: newGold }));

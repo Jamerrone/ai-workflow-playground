@@ -45,6 +45,7 @@ export function buildUpgradesRegistry(): ConfigRegistry {
         killReward: 0,
       },
     },
+    summons: {},
     waves: {
       w1: {
         groups: [{ id: "g1", enemy: "grunt", count: 1, interval: 0, delay: 0 }],
