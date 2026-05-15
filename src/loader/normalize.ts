@@ -37,7 +37,7 @@ function normalizeEntry(
   }
   // Normalise nested AttackEffect / op kind shorthand. Towers carry attacks[].effects;
   // upgrades carry ops[]. Each item in such arrays accepts a string shorthand.
-  if (bucket === "towers" && Array.isArray(clone.attacks)) {
+  if ((bucket === "towers" || bucket === "enemies") && Array.isArray(clone.attacks)) {
     clone.attacks = (clone.attacks as unknown[]).map((atk) =>
       isObject(atk) && Array.isArray(atk.effects)
         ? { ...atk, effects: atk.effects.map(stringToKind) }

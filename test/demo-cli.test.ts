@@ -109,4 +109,14 @@ describe("Slice 16: shared-data set", () => {
     // Slice 12: aerial enemy archetype carrying the flying tag.
     expect(bat.tags).toContain("flying");
   });
+
+  it("grunt enemy carries an attacks array (regression: enemy with attacks broke the CLI demo)", () => {
+    const grunt = JSON.parse(
+      readFileSync(join(DATA_DIR, "enemies", "grunt.json"), "utf8"),
+    ) as { attacks?: unknown[] };
+    // grunt.json was added an attacks array as part of issue-55 regression coverage.
+    // The demo must still win when enemy archetypes carry attacks (issue #55).
+    expect(Array.isArray(grunt.attacks)).toBe(true);
+    expect((grunt.attacks as unknown[]).length).toBeGreaterThan(0);
+  });
 });

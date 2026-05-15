@@ -2,5 +2,12 @@
   "tags": ["ground"],
   "stats": { "hp": 10, "speed": 1, "baseDamage": 1 },
   "killReward": 5,
+  "attacks": [
+    {
+      "id": "bite",
+      "stats": { "range": 3, "cooldown": 1 },
+      "effects": [{ "kind": "damage", "stats": { "amount": 2 } }]
+    }
+  ],
   "meta": { "name": "Grunt" }
 }
