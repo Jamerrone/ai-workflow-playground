@@ -114,9 +114,7 @@ describe("Slice 16: shared-data set", () => {
     const grunt = JSON.parse(
       readFileSync(join(DATA_DIR, "enemies", "grunt.json"), "utf8"),
     ) as { attacks?: unknown[] };
-    // grunt.json was added an attacks array as part of issue-55 regression coverage.
-    // The demo must still win when enemy archetypes carry attacks (issue #55).
     expect(Array.isArray(grunt.attacks)).toBe(true);
-    expect((grunt.attacks as unknown[]).length).toBeGreaterThan(0);
+    expect(grunt.attacks!.length).toBeGreaterThan(0);
   });
 });

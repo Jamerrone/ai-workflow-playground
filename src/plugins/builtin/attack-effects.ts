@@ -72,7 +72,7 @@ function applyDamage(ctx: AttackEffectContext, targetId: string, amount: number)
   const health = e.components.get("health") as Record<string, unknown> | undefined;
   if (health === undefined || typeof health.hp !== "number") return;
   const newHp = health.hp - amount;
-  ctx.world.mutate(targetId, "health", (h) => ({ ...(h as object), hp: newHp }));
+  ctx.world.mutate(targetId, "health", () => ({ ...health, hp: newHp }));
 }
 
 function isStatsObject(v: unknown): v is Record<string, unknown> {
