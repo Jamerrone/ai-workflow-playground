@@ -69,9 +69,10 @@ function matchesFilter(
 function applyDamage(ctx: AttackEffectContext, targetId: string, amount: number): void {
   const e = ctx.world.get(targetId);
   if (!e) return;
-  const hp = (e.components.get("health") as { hp: number } | undefined)?.hp;
-  if (hp === undefined) return;
-  ctx.world.mutate(targetId, "health", () => ({ hp: hp - amount }));
+  const health = e.components.get("health") as Record<string, unknown> | undefined;
+  if (health === undefined || typeof health.hp !== "number") return;
+  const newHp = health.hp - amount;
+  ctx.world.mutate(targetId, "health", (h) => ({ ...(h as object), hp: newHp }));
 }
 
 function isStatsObject(v: unknown): v is Record<string, unknown> {
