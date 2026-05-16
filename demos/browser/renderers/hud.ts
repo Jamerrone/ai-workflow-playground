@@ -71,15 +71,11 @@ export class HudRenderer {
   // haven't been spawned yet.
   syncFromWorld(): void {
     const towersState = this.engine.world.get(TOWERS_STATE_ENTITY);
-    const gold = towersState?.components.get("gold") as
-      | { amount: number }
-      | undefined;
+    const gold = towersState?.components.get("gold");
     if (gold) this.goldEl.textContent = String(gold.amount);
 
     const winLossState = this.engine.world.get(WIN_LOSS_STATE_ENTITY);
-    const bases = winLossState?.components.get("bases") as
-      | { entries: ReadonlyArray<{ id: string; hp: number }> }
-      | undefined;
+    const bases = winLossState?.components.get("bases");
     if (bases) {
       for (const b of bases.entries) {
         this.baseHp.set(b.id, b.hp);
@@ -89,9 +85,7 @@ export class HudRenderer {
     }
 
     const wavesState = this.engine.world.get(WAVES_STATE_ENTITY);
-    const ws = wavesState?.components.get("waveState") as
-      | { nextIndex: number; active: boolean }
-      | undefined;
+    const ws = wavesState?.components.get("waveState");
     if (ws) {
       this.waveEl.textContent = ws.active
         ? String(ws.nextIndex + 1)

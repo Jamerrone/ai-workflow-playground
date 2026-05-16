@@ -46,16 +46,13 @@ export const movementPlugin: Plugin = {
           // Engaged Enemies halt to fight. Walkers without an `engagement`
           // component (e.g. summons spawned with pathProgress alone) walk
           // normally — the absence of engagement is "not engaged".
-          const eng = e.components.get("engagement") as
-            | { target?: string }
-            | undefined;
+          const eng = e.components.get("engagement");
           if (eng?.target) continue;
-          const pp = e.components.get("pathProgress") as PathProgress;
-          const pos = e.components.get("position") as Position;
+          const pp = e.components.get("pathProgress")!;
+          const pos = e.components.get("position")!;
           const path = (map.paths as Array<any>).find((p) => p.id === pp.pathId);
           // statusEffects 'slow' entries multiply the effective speed.
-          const status =
-            (e.components.get("statusEffects") as ReadonlyArray<{ kind: string; factor?: number }> | undefined) ?? [];
+          const status = e.components.get("statusEffects") ?? [];
           const slowMul = status
             .filter((s): s is SlowEntry => s.kind === "slow")
             .reduce((acc, s) => acc * s.factor, 1);
@@ -96,9 +93,7 @@ export const movementPlugin: Plugin = {
                 damage: pp.baseDamage,
               });
               const stateEntity = ctx.world.get("win-loss/state");
-              const bases = stateEntity?.components.get("bases") as
-                | { entries: Array<{ id: string; position: Position; hp: number }> }
-                | undefined;
+              const bases = stateEntity?.components.get("bases");
               if (bases) {
                 const updatedEntries = bases.entries.map((b) =>
                   b.id === baseId ? { ...b, hp: b.hp - pp.baseDamage } : b,

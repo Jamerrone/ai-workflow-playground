@@ -39,6 +39,25 @@ interface ProjectileData {
   readonly effects: ReadonlyArray<AttackEffectConfig>;
 }
 
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    projectile: {
+      sourceId: string;
+      sourcePosition: Position;
+      targetId: string;
+      speed: number;
+      distanceTraveled: number;
+      maxRange: number;
+      attack: {
+        id: string;
+        stats: Readonly<Record<string, unknown>>;
+        targetFilter?: { require?: readonly string[]; exclude?: readonly string[] };
+      };
+      effects: ReadonlyArray<import("../../types.js").AttackEffectConfig>;
+    };
+  }
+}
+
 export const projectilesPlugin: Plugin = {
   id: "projectiles",
   register(api) {
@@ -109,13 +128,11 @@ export const projectilesPlugin: Plugin = {
         const toDestroy: string[] = [];
 
         for (const proj of projectiles) {
-          const data = proj.components.get(PROJECTILE_COMPONENT) as ProjectileData;
-          const pos = proj.components.get("position") as Position;
+          const data = proj.components.get("projectile")!;
+          const pos = proj.components.get("position")!;
 
           const target = ctx.world.get(data.targetId);
-          const targetPos = target?.components.get("position") as
-            | Position
-            | undefined;
+          const targetPos = target?.components.get("position");
 
           if (!target || !targetPos) {
             ctx.emit({
@@ -185,12 +202,7 @@ export const projectilesPlugin: Plugin = {
 
         if (hitFires.length > 0) {
           const pendingState = ctx.world.get(PENDING_FIRES_ENTITY);
-          const queue =
-            (
-              pendingState?.components.get(FIRES_COMPONENT) as
-                | { queue: unknown[] }
-                | undefined
-            )?.queue ?? [];
+          const queue = pendingState?.components.get("pendingFires")?.queue ?? [];
           ctx.world.mutate(PENDING_FIRES_ENTITY, FIRES_COMPONENT, () => ({
             queue: [...queue, ...hitFires],
           }));

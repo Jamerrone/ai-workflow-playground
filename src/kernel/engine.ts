@@ -345,21 +345,16 @@ export function createEngine(
       const fireAttack = (req: FireAttackRequest): boolean => {
         const attacker = world.get(req.attacker);
         if (!attacker) return false;
-        const cd = attacker.components.get(COOLDOWN_TIMER_COMPONENT) as
-          | { remaining: number }
-          | undefined;
+        const cd = attacker.components.get("cooldownTimer");
         if (cd && cd.remaining > 0) return false;
         const target = world.get(req.primaryTarget);
         if (!target) return false;
-        const attackerPos = attacker.components.get("position") as Position | undefined;
-        const targetPos = target.components.get("position") as Position | undefined;
+        const attackerPos = attacker.components.get("position");
+        const targetPos = target.components.get("position");
         if (!attackerPos || !targetPos) return false;
         const pendingState = world.get(PENDING_FIRES_ENTITY);
         if (!pendingState) return false;
-        const existing =
-          (pendingState.components.get(PENDING_FIRES_COMPONENT) as
-            | { queue: QueuedFire[] }
-            | undefined)?.queue ?? [];
+        const existing = pendingState.components.get("pendingFires")?.queue ?? [];
         const fire: QueuedFire = {
           source: { id: req.attacker, position: { ...attackerPos } },
           primaryTarget: { id: req.primaryTarget, position: { ...targetPos } },

@@ -3,6 +3,7 @@ import {
   PHASE_ORDER,
   Phase,
   type ActionContext,
+  type AttackEffectConfig,
   type GameEvent,
   type OverrideTargetingAction,
   type PlaceTowerAction,
@@ -142,6 +143,24 @@ interface MapData {
   readonly towerSlots?: ReadonlyArray<Position>;
 }
 
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    tower: { archetype: string };
+    position: { x: number; y: number };
+    cooldownTimer: { remaining: number };
+    gold: { amount: number };
+    attacks: ReadonlyArray<{
+      readonly id: string;
+      readonly stats: { readonly range: number; readonly cooldown: number; readonly [key: string]: number };
+      readonly effects: ReadonlyArray<AttackEffectConfig>;
+      readonly targetFilter?: { readonly require?: readonly string[]; readonly exclude?: readonly string[] };
+    }>;
+    purchasedUpgrades: string[];
+    targeting: TargetingStrategyConfig;
+    soldTowers: { ids: string[] };
+  }
+}
+
 export const towersPlugin: Plugin = {
   id: "towers",
   register(api) {
@@ -233,7 +252,7 @@ export const towersPlugin: Plugin = {
         }
 
         const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
-        const goldComp = goldEntity?.components.get("gold") as { amount: number } | undefined;
+        const goldComp = goldEntity?.components.get("gold");
         if (!goldComp || goldComp.amount < towerDef.cost) {
           return actionFailure("INSUFFICIENT_GOLD", "Not enough gold to place tower.");
         }
@@ -279,7 +298,7 @@ export const towersPlugin: Plugin = {
       handle(ctx, action) {
         const a = action as SellTowerAction;
         const stateEntity = ctx.world.get(TOWERS_STATE_ENTITY);
-        const soldComp = stateEntity?.components.get("soldTowers") as { ids: string[] } | undefined;
+        const soldComp = stateEntity?.components.get("soldTowers");
         if (soldComp && soldComp.ids.includes(a.tower)) {
           return actionFailure(
             "TOWER_ALREADY_SOLD",
@@ -290,7 +309,7 @@ export const towersPlugin: Plugin = {
         if (!towerEntity || !towerEntity.components.has("tower")) {
           return actionFailure("UNKNOWN_TOWER", `Tower entity '${a.tower}' not found.`);
         }
-        const archetypeId = (towerEntity.components.get("tower") as { archetype: string }).archetype;
+        const archetypeId = towerEntity.components.get("tower")!.archetype;
         const archetype = (ctx.registry.towers as Record<string, TowerArchetype>)[archetypeId];
         if (!archetype) {
           return actionFailure(
@@ -298,8 +317,7 @@ export const towersPlugin: Plugin = {
             `Tower archetype '${archetypeId}' is not registered.`,
           );
         }
-        const purchased =
-          (towerEntity.components.get("purchasedUpgrades") as string[] | undefined) ?? [];
+        const purchased = towerEntity.components.get("purchasedUpgrades") ?? [];
         const upgrades = ctx.registry.upgrades as Record<string, UpgradeArchetype | undefined>;
         const upgradeCosts = purchased.reduce(
           (sum, id) => sum + (upgrades[id]?.cost ?? 0),
@@ -311,7 +329,7 @@ export const towersPlugin: Plugin = {
         const refund = Math.floor((archetype.cost + upgradeCosts) * refundPercent + 1e-9);
 
         // Validation complete — apply.
-        const position = towerEntity.components.get("position") as Position | undefined;
+        const position = towerEntity.components.get("position");
         ctx.world.destroy(a.tower);
         const newSoldIds = [...(soldComp?.ids ?? []), a.tower];
         ctx.world.mutate(TOWERS_STATE_ENTITY, "soldTowers", () => ({ ids: newSoldIds }));
@@ -381,7 +399,7 @@ export const towersPlugin: Plugin = {
         const refund = (event as { refund?: number }).refund;
         if (typeof refund !== "number" || refund === 0) return;
         const stateEntity = ctx.world.get(TOWERS_STATE_ENTITY);
-        const goldComp = stateEntity?.components.get("gold") as { amount: number } | undefined;
+        const goldComp = stateEntity?.components.get("gold");
         if (!goldComp) return;
         const newAmount = goldComp.amount + refund;
         ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount: newAmount }));

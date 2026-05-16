@@ -11,23 +11,14 @@ declare module "../../types.js" {
     scenarioLost: { kind: "scenarioLost"; tick: number };
     scenarioWon: { kind: "scenarioWon"; tick: number };
   }
-}
-
-interface WaveState {
-  nextIndex: number;
-  active: boolean;
-  timeInWave: number;
-  sentByGroup: Record<string, number>;
+  interface ComponentRegistry {
+    bases: { entries: Array<{ id: string; position: { x: number; y: number }; hp: number }> };
+    scenarioStatus: { ended: boolean; won: boolean; lost: boolean };
+  }
 }
 
 const STATE_ENTITY = "win-loss/state";
 const WAVES_STATE_ENTITY = "waves/state";
-
-interface BaseEntry {
-  id: string;
-  position: Position;
-  hp: number;
-}
 
 export const winLossPlugin: Plugin = {
   id: "win-loss",
@@ -61,15 +52,11 @@ export const winLossPlugin: Plugin = {
         if (!ctx.scenarioId) return;
         const stateEntity = ctx.world.get(STATE_ENTITY);
         if (!stateEntity) return;
-        const status = stateEntity.components.get("scenarioStatus") as
-          | { ended: boolean; won: boolean; lost: boolean }
-          | undefined;
+        const status = stateEntity.components.get("scenarioStatus");
         if (!status || status.ended) return;
-        const bases = stateEntity.components.get("bases") as
-          | { entries: BaseEntry[] }
-          | undefined;
+        const bases = stateEntity.components.get("bases");
         const wavesEntity = ctx.world.get(WAVES_STATE_ENTITY);
-        const ws = wavesEntity?.components.get("waveState") as WaveState | undefined;
+        const ws = wavesEntity?.components.get("waveState");
         if (!bases || !ws) return;
 
         const baseDead = bases.entries.some((b) => b.hp <= 0);

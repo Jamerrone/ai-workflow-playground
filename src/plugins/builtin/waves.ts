@@ -194,6 +194,27 @@ function validateScenario(ctx: BucketValidatorContext): void {
   }
 }
 
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    enemy: {
+      archetype: string;
+      killReward: number;
+      waveIndex: number;
+      groupId: string;
+      tags: readonly string[];
+    };
+    health: { hp: number; max?: number };
+    pathProgress: { pathId: string; wpIndex: number; speed: number; baseDamage: number };
+    waveState: {
+      nextIndex: number;
+      active: boolean;
+      timeInWave: number;
+      sentByGroup: Record<string, number>;
+      cooldownRemaining: number | null;
+    };
+  }
+}
+
 export const wavesPlugin: Plugin = {
   id: "waves",
   register(api) {
@@ -242,7 +263,7 @@ export const wavesPlugin: Plugin = {
           );
         }
         const wsEntity = ctx.world.get(STATE_ENTITY);
-        const ws = wsEntity?.components.get("waveState") as WaveState | undefined;
+        const ws = wsEntity?.components.get("waveState");
         if (!ws) return actionFailure("NO_SCENARIO_LOADED", "Wave state missing.");
         if (ws.active) return actionFailure("WAVE_ALREADY_ACTIVE", "Current wave still spawning.");
         if (ws.nextIndex >= scenario.waves.length) {
@@ -283,7 +304,7 @@ export const wavesPlugin: Plugin = {
         if (!ctx.scenarioId) return;
         const game = ctx.world.get(STATE_ENTITY);
         if (!game) return;
-        let ws = game.components.get("waveState") as WaveState | undefined;
+        let ws = game.components.get("waveState");
         if (!ws) return;
 
         const scenario = (ctx.registry.scenarios as Record<string, ScenarioData>)[ctx.scenarioId]!;
@@ -393,7 +414,7 @@ export const wavesPlugin: Plugin = {
 
         const allSpawnsDone = totalSpawned >= totalRequired;
         const thisWaveSurvivors = ctx.world.query({ all: ["enemy"] }).filter((e) => {
-          const ec = e.components.get("enemy") as { waveIndex?: number } | undefined;
+          const ec = e.components.get("enemy");
           return ec?.waveIndex === ws.nextIndex;
         });
         const naturalClear = allSpawnsDone && thisWaveSurvivors.length === 0;
@@ -433,7 +454,7 @@ export const wavesPlugin: Plugin = {
         const reward = (event as { reward?: number }).reward;
         if (typeof reward !== "number" || reward === 0) return;
         const stateEntity = ctx.world.get(GOLD_ENTITY);
-        const gold = stateEntity?.components.get("gold") as { amount: number } | undefined;
+        const gold = stateEntity?.components.get("gold");
         if (!gold) return;
         const newAmount = gold.amount + reward;
         ctx.world.mutate(GOLD_ENTITY, "gold", () => ({ amount: newAmount }));

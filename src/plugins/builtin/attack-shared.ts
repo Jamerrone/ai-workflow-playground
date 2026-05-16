@@ -1,8 +1,8 @@
-import type { AttackEffectConfig } from "../../types.js";
+import type { AttackEffectConfig, EntityComponents } from "../../types.js";
 
 export interface AttackData {
   readonly id: string;
-  readonly stats: { readonly range: number; readonly cooldown: number };
+  readonly stats: { readonly range: number; readonly cooldown: number; readonly [key: string]: number };
   readonly effects: ReadonlyArray<AttackEffectConfig>;
   readonly targetFilter?: {
     readonly require?: readonly string[];
@@ -24,10 +24,10 @@ export function matchesFilter(
   return true;
 }
 
-export function entityTags(components: ReadonlyMap<string, unknown>): readonly string[] {
-  for (const name of ["enemy", "guard"]) {
-    const c = components.get(name) as { tags?: readonly string[] } | undefined;
-    if (c?.tags) return c.tags;
-  }
+export function entityTags(components: EntityComponents): readonly string[] {
+  const enemy = components.get("enemy");
+  if (enemy?.tags) return enemy.tags;
+  const guard = components.get("guard");
+  if (guard?.tags) return guard.tags;
   return [];
 }

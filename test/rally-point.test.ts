@@ -160,7 +160,7 @@ describe("validateRallyPoint", () => {
       placementMode: { kind: "free" },
     });
     world.spawn("blocked:1", {
-      blockedRegion: { x: 2, y: 0, w: 2, h: 2 },
+      blockedRegion: { x: 2, y: 0, width: 2, height: 2 },
     });
     const result = validateRallyPoint({
       position: { x: 2, y: 1 },

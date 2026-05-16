@@ -11,25 +11,18 @@ function manhattan(a: Position, b: Position): number {
 }
 
 function entityPosition(c: TargetingCandidate): Position {
-  return c.components.get("position") as Position;
+  return c.components.get("position")!;
 }
 
 function entityHp(c: TargetingCandidate): number {
-  return (c.components.get("health") as { hp: number } | undefined)?.hp ?? 0;
+  return c.components.get("health")?.hp ?? 0;
 }
 
-// Tag-bearing components by convention: each EntityKind that participates in
-// targeting can expose a `tags` field on its own discriminator component. The
-// kernel does not enforce this; targeting strategies just check the conventional
-// component names in order, so `tag-priority` works uniformly across Enemy
-// targets and Guard targets.
-const TAG_BEARING_COMPONENTS: readonly string[] = ["enemy", "guard"];
-
 function entityTags(c: TargetingCandidate): readonly string[] {
-  for (const name of TAG_BEARING_COMPONENTS) {
-    const comp = c.components.get(name) as { tags?: readonly string[] } | undefined;
-    if (comp?.tags) return comp.tags;
-  }
+  const enemy = c.components.get("enemy");
+  if (enemy?.tags) return enemy.tags;
+  const guard = c.components.get("guard");
+  if (guard?.tags) return guard.tags;
   return [];
 }
 

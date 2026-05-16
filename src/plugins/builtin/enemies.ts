@@ -176,9 +176,7 @@ export const enemiesPlugin: Plugin = {
         const armedEnemies = ctx.world
           .query({ all: ["enemy", "position", "attacks"] })
           .filter((e) => {
-            const a = e.components.get("attacks") as
-              | ReadonlyArray<AttackData>
-              | undefined;
+            const a = e.components.get("attacks");
             return Array.isArray(a) && a.length > 0;
           });
 
@@ -188,14 +186,12 @@ export const enemiesPlugin: Plugin = {
         const engagementsPerGuard = new Map<string, number>();
         const needsSelection: typeof armedEnemies = [];
         for (const e of armedEnemies) {
-          const ePos = e.components.get("position") as Position;
-          const attacks = e.components.get("attacks") as ReadonlyArray<AttackData>;
-          const eng = e.components.get("engagement") as
-            | { target?: string }
-            | undefined;
+          const ePos = e.components.get("position")!;
+          const attacks = e.components.get("attacks") ?? [];
+          const eng = e.components.get("engagement");
           if (eng?.target) {
             const target = ctx.world.get(eng.target);
-            const tPos = target?.components.get("position") as Position | undefined;
+            const tPos = target?.components.get("position");
             if (target && tPos) {
               const dx = tPos.x - ePos.x;
               const dy = tPos.y - ePos.y;
@@ -219,11 +215,11 @@ export const enemiesPlugin: Plugin = {
         // Phase 2: select new engagements respecting the cap.
         const guards = ctx.world.query({ all: ["guard", "position"] });
         for (const e of needsSelection) {
-          const ePos = e.components.get("position") as Position;
-          const attacks = e.components.get("attacks") as ReadonlyArray<AttackData>;
+          const ePos = e.components.get("position")!;
+          const attacks = e.components.get("attacks") ?? [];
           const eligible = guards.filter((g) => {
             if ((engagementsPerGuard.get(g.id) ?? 0) >= cap) return false;
-            const gPos = g.components.get("position") as Position;
+            const gPos = g.components.get("position")!;
             const dx = gPos.x - ePos.x;
             const dy = gPos.y - ePos.y;
             const distSq = dx * dx + dy * dy;
@@ -243,8 +239,7 @@ export const enemiesPlugin: Plugin = {
             continue;
           }
 
-          const archetypeId = (e.components.get("enemy") as { archetype: string })
-            .archetype;
+          const archetypeId = e.components.get("enemy")!.archetype;
           const archetype = (ctx.registry.enemies as Record<
             string,
             EnemyArchetype | undefined
@@ -285,21 +280,19 @@ export const enemiesPlugin: Plugin = {
         for (const e of ctx.world.query({
           all: ["enemy", "engagement", "position", "attacks"],
         })) {
-          const eng = e.components.get("engagement") as { target?: string };
+          const eng = e.components.get("engagement")!;
           if (!eng.target) continue;
           const guard = ctx.world.get(eng.target);
           if (!guard) continue;
-          const cd = e.components.get("cooldownTimer") as
-            | { remaining: number }
-            | undefined;
+          const cd = e.components.get("cooldownTimer");
           const remaining = cd?.remaining ?? 0;
           const newRemaining = Math.max(0, remaining - ctx.dt);
           ctx.world.mutate(e.id, "cooldownTimer", () => ({ remaining: newRemaining }));
           if (newRemaining > 0) continue;
 
-          const attacks = e.components.get("attacks") as ReadonlyArray<AttackData>;
-          const ePos = e.components.get("position") as Position;
-          const gPos = guard.components.get("position") as Position;
+          const attacks = e.components.get("attacks") ?? [];
+          const ePos = e.components.get("position")!;
+          const gPos = guard.components.get("position")!;
           const targetTags = entityTags(guard.components);
           const dx = gPos.x - ePos.x;
           const dy = gPos.y - ePos.y;
@@ -316,8 +309,7 @@ export const enemiesPlugin: Plugin = {
             }));
           if (eligible.length === 0) continue;
 
-          const archetypeId = (e.components.get("enemy") as { archetype: string })
-            .archetype;
+          const archetypeId = e.components.get("enemy")!.archetype;
           const archetype = (ctx.registry.enemies as Record<
             string,
             EnemyArchetype | undefined
