@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tower Defence — Browser Demo</title>
     <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
       body {
         background: #1a1a2e;
         color: #eee;
@@ -16,7 +20,9 @@
         padding: 1rem;
         gap: 1rem;
       }
-      h1 { font-size: 1.4rem; }
+      h1 {
+        font-size: 1.4rem;
+      }
       #layout {
         display: flex;
         gap: 1rem;
@@ -28,18 +34,71 @@
         background: #f5f0e8;
       }
       #hud {
-        min-width: 160px;
+        min-width: 200px;
         background: #16213e;
-        border: 1px solid #444;
+        border: 1px solid #2a3a52;
         border-radius: 4px;
-        padding: 0.75rem;
+        padding: 0.85rem 1rem;
         font-size: 0.9rem;
-        line-height: 1.8;
       }
-      #hud-banner {
+      .hud-stat {
+        margin-bottom: 0.7rem;
+      }
+      .hud-stat:last-of-type {
+        margin-bottom: 0;
+      }
+      .hud-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #7a8aa8;
+        margin-bottom: 0.15rem;
+      }
+      .hud-value {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #f0f4ff;
+        font-variant-numeric: tabular-nums;
+      }
+      .hud-base-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .hud-base-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 0.2rem;
+      }
+      .hud-base-name {
+        color: #c8d0e0;
+      }
+      .hud-base-hp {
+        color: #f0f4ff;
+        font-variant-numeric: tabular-nums;
+      }
+      .hud-base-bar {
+        height: 6px;
+        background: #0e1a2c;
+        border: 1px solid #2a3a52;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .hud-base-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #2ecc71, #27ae60);
+        transition: width 0.2s ease;
+      }
+      .hud-banner {
         font-size: 1.2rem;
         font-weight: bold;
-        margin-top: 0.5rem;
+        margin-top: 0.85rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid #2a3a52;
       }
       #error {
         display: none;

@@ -28,11 +28,13 @@ async function main(): Promise<void> {
     fetch("transcript.json"),
   ]);
 
-  if (!dataRes.ok) throw new Error(`Failed to load data.json: ${dataRes.status}`);
-  if (!transcriptRes.ok) throw new Error(`Failed to load transcript.json: ${transcriptRes.status}`);
+  if (!dataRes.ok)
+    throw new Error(`Failed to load data.json: ${dataRes.status}`);
+  if (!transcriptRes.ok)
+    throw new Error(`Failed to load transcript.json: ${transcriptRes.status}`);
 
-  const data = await dataRes.json() as Record<string, unknown>;
-  const transcript = await transcriptRes.json() as TranscriptFile;
+  const data = (await dataRes.json()) as Record<string, unknown>;
+  const transcript = (await transcriptRes.json()) as TranscriptFile;
 
   const result = buildRegistry(data);
   if (!result.ok) {
@@ -47,14 +49,17 @@ async function main(): Promise<void> {
   const canvas = document.getElementById("gameplay") as HTMLCanvasElement;
   const hudContainer = document.getElementById("hud") as HTMLElement;
 
-  const gameplayRenderer = new GameplayRenderer(canvas, engine, result.registry, transcript.scenario);
-  new HudRenderer(hudContainer, engine);
+  const gameplayRenderer = new GameplayRenderer(
+    canvas,
+    engine,
+    result.registry,
+    transcript.scenario,
+  );
+  const hud = new HudRenderer(hudContainer, engine);
   new AudioRenderer(engine);
 
   const actionSource = new TranscriptActionSource(transcript);
-  const clock = useMaxSpeed
-    ? new MaxSpeedClock(transcript.dt)
-    : new RafClock();
+  const clock = useMaxSpeed ? new MaxSpeedClock(transcript.dt) : new RafClock();
 
   const loop = new BrowserDemoLoop({
     engine,
@@ -65,6 +70,10 @@ async function main(): Promise<void> {
     maxTicks: transcript.maxTicks,
     gameplayRenderer,
   });
+
+  // Seed HUD with starting gold / base HP / wave state. BrowserDemoLoop's
+  // constructor calls engine.loadScenario, so by here the state entities exist.
+  hud.syncFromWorld();
 
   loop.start();
 }

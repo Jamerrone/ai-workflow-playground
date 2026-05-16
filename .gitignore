@@ -1,2 +1,5 @@
 node_modules
 demos/snapshots/
+dist/
+test-results/
+playwright-report/
