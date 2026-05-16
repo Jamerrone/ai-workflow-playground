@@ -9,5 +9,5 @@
       "effects": [{ "kind": "damage", "stats": { "amount": 2 } }]
     }
   ],
-  "meta": { "name": "Grunt" }
+  "meta": { "name": "Grunt", "symbol": "G" }
 }

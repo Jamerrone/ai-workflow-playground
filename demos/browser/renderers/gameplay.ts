@@ -14,22 +14,6 @@ const PALETTE: Record<string, string> = {
   default: "#c8b89a",
 };
 
-// Display symbols for tower archetypes. These could move into each tower
-// JSON's meta.symbol field — for now hard-coded here matches the four
-// archetypes shipped in demos/shared-data/towers/.
-const TOWER_LABELS: Record<string, string> = {
-  archer: "A",
-  mortar: "M",
-  barracks: "B",
-  "anti-air": "↑",
-};
-
-// Display symbols for enemy archetypes. Same caveat as TOWER_LABELS.
-const ENEMY_LABELS: Record<string, string> = {
-  grunt: "G",
-  bat: "B",
-};
-
 const ENEMY_COLOR_AERIAL = "#9b59b6";
 const ENEMY_COLOR_GROUND = "#e74c3c";
 const GUARD_COLOR = "#f39c12";
@@ -65,9 +49,14 @@ interface ScenarioConfig {
   readonly map: string;
 }
 
+interface TowerArchetype {
+  readonly meta?: { readonly symbol?: string };
+}
+
 interface EnemyArchetype {
   readonly tags?: ReadonlyArray<string>;
   readonly stats: { readonly hp: number };
+  readonly meta?: { readonly symbol?: string };
 }
 
 interface EntityPos {
@@ -78,6 +67,7 @@ interface EntityPos {
 export class GameplayRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly mapCfg: MapConfig;
+  private readonly towerArchetypes: Record<string, TowerArchetype>;
   private readonly enemyArchetypes: Record<string, EnemyArchetype>;
 
   private prevPositions = new Map<string, EntityPos>();
@@ -101,6 +91,7 @@ export class GameplayRenderer {
       scenarioId
     ]!;
     this.mapCfg = (registry.maps as Record<string, MapConfig>)[scenario.map]!;
+    this.towerArchetypes = registry.towers as Record<string, TowerArchetype>;
     this.enemyArchetypes = registry.enemies as Record<string, EnemyArchetype>;
 
     canvas.width = this.mapCfg.width * CELL;
@@ -254,7 +245,7 @@ export class GameplayRenderer {
   ): void {
     const archetype = (entity.components.get("tower") as { archetype: string })
       .archetype;
-    const label = TOWER_LABELS[archetype] ?? archetype[0]?.toUpperCase() ?? "?";
+    const label = this.towerArchetypes[archetype]?.meta?.symbol ?? archetype[0]?.toUpperCase() ?? "?";
     ctx.fillStyle = TOWER_COLOR;
     ctx.fillRect(cx - CELL * 0.3, cy - CELL * 0.3, CELL * 0.6, CELL * 0.6);
     this.drawLabel(ctx, cx, cy, label, "#fff", 16);
@@ -273,8 +264,7 @@ export class GameplayRenderer {
     const isAerial =
       def?.tags?.includes("aerial") || def?.tags?.includes("flying");
     const color = isAerial ? ENEMY_COLOR_AERIAL : ENEMY_COLOR_GROUND;
-    const label =
-      ENEMY_LABELS[archetypeId] ?? archetypeId[0]?.toUpperCase() ?? "?";
+    const label = this.enemyArchetypes[archetypeId]?.meta?.symbol ?? archetypeId[0]?.toUpperCase() ?? "?";
 
     ctx.beginPath();
     ctx.arc(cx, cy, CELL * 0.3, 0, Math.PI * 2);

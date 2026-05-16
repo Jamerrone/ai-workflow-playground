@@ -9,5 +9,5 @@
       "rallyPointRange": 6
     }
   },
-  "meta": { "name": "Barracks" }
+  "meta": { "name": "Barracks", "symbol": "B" }
 }
