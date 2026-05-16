@@ -7,6 +7,7 @@ import {
   type Plugin,
   type Position,
 } from "../../types.js";
+import { validateNumberStats } from "./attack-effects.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -15,7 +16,6 @@ declare module "../../types.js" {
     projectileHit: { kind: "projectileHit"; tick: number; projectile: string; source: Position; target: Position };
   }
 }
-import { validateNumberStats } from "./attack-effects.js";
 
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
 const FIRES_COMPONENT = "pendingFires";

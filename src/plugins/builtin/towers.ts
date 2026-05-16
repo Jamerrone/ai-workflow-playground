@@ -13,14 +13,6 @@ import {
   type SellTowerAction,
   type TargetingStrategyConfig,
 } from "../../types.js";
-
-declare module "../../types.js" {
-  interface GameEvents {
-    towerPlaced: { kind: "towerPlaced"; tick: number; tower: string; archetype: string; position: Position };
-    towerSold: { kind: "towerSold"; tick: number; tower: string; archetype: string; position: Position | undefined; refund: number };
-    targetingOverridden: { kind: "targetingOverridden"; tick: number; tower: string; strategy: TargetingStrategyConfig };
-  }
-}
 import {
   checkKind,
   requireArray,
@@ -29,6 +21,14 @@ import {
 } from "../../loader/validator-helpers.js";
 import { isObject } from "../../loader/normalize.js";
 import type { BucketValidatorContext } from "../../loader/types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    towerPlaced: { kind: "towerPlaced"; tick: number; tower: string; archetype: string; position: Position };
+    towerSold: { kind: "towerSold"; tick: number; tower: string; archetype: string; position: Position | undefined; refund: number };
+    targetingOverridden: { kind: "targetingOverridden"; tick: number; tower: string; strategy: TargetingStrategyConfig };
+  }
+}
 
 // AttackEffect kinds that the built-in attack-effects plugin ships with a
 // `damagePreview`. Used by the towers validator to warn when a Tower opts into

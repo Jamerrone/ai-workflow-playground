@@ -8,17 +8,17 @@ import {
   type UpgradeOpDef,
   type UpgradeOpValidationResult,
 } from "../../types.js";
+import {
+  checkKind,
+  validateUpgradeOpFields,
+} from "../../loader/validator-helpers.js";
+import type { BucketValidatorContext } from "../../loader/types.js";
 
 declare module "../../types.js" {
   interface GameEvents {
     upgradePurchased: { kind: "upgradePurchased"; tick: number; tower: string; upgrade: string; delta: number; amount: number };
   }
 }
-import {
-  checkKind,
-  validateUpgradeOpFields,
-} from "../../loader/validator-helpers.js";
-import type { BucketValidatorContext } from "../../loader/types.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 
