@@ -67,10 +67,6 @@ const CANONICAL_EVENT_KINDS = new Set([
 // Helpers
 // ---------------------------------------------------------------------------
 
-function collectEvents(setup: (engine: ReturnType<typeof createEngine>) => void, maxTicks = 200): GameEvent[] {
-  return setup as unknown as GameEvent[]; // overloaded below
-}
-
 function runScenario(
   registry: ConfigRegistry,
   setup: (eng: ReturnType<typeof createEngine>) => void,

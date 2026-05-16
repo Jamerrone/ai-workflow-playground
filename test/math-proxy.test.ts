@@ -1,15 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { withTickMath } from "../src/kernel/math-proxy.js";
 import { createEngine, Phase } from "../src/index.js";
 import type { Plugin } from "../src/index.js";
 import { emptyRegistry } from "./helpers/empty-registry.js";
-
-// After each test restore Math in case an assertion threw mid-proxy.
-afterEach(() => {
-  // withTickMath always restores Math in its finally block; this is a
-  // belt-and-suspenders guard for tests that directly call the function
-  // without the engine scaffolding.
-});
 
 describe("dev-mode Math proxy — forbidden functions", () => {
   const FORBIDDEN = [
