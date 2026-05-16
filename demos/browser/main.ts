@@ -3,6 +3,7 @@ import {
   createEngine,
   formatLoaderErrors,
 } from "../../src/index.js";
+import type { PlayerAction } from "../../src/index.js";
 import { builtInBundle } from "../../src/plugins/builtin/index.js";
 import { TranscriptActionSource } from "./action-source.js";
 import { BrowserDemoLoop, MaxSpeedClock, RafClock } from "./loop.js";
@@ -15,7 +16,7 @@ interface TranscriptFile {
   readonly seed: number;
   readonly dt: number;
   readonly maxTicks: number;
-  readonly actions: ReadonlyArray<readonly [number, import("../../src/index.js").PlayerAction]>;
+  readonly actions: ReadonlyArray<readonly [number, PlayerAction]>;
 }
 
 async function main(): Promise<void> {

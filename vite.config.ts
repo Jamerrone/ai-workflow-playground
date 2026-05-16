@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 

@@ -123,18 +123,13 @@ export class BrowserDemoLoop {
     const step = (wallDelta: number): void => {
       accumulator += wallDelta;
       while (accumulator >= fixedDt) {
-        if (this._tickIndex >= maxTicks) {
+        if (this._tickIndex >= maxTicks || this.won || this.lost) {
           finish();
           return;
         }
 
         for (const action of actionSource.actionsForTick(this._tickIndex)) {
           engine.dispatch(action);
-        }
-
-        if (this.won || this.lost) {
-          finish();
-          return;
         }
 
         gameplayRenderer.beforeTick();

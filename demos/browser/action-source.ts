@@ -2,7 +2,6 @@ import type { PlayerAction } from "../../src/index.js";
 
 export interface ActionSource {
   actionsForTick(tickIndex: number): ReadonlyArray<PlayerAction>;
-  recordAction?(tickIndex: number, action: PlayerAction): void;
 }
 
 interface TranscriptInput {
