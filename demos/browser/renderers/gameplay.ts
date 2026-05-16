@@ -99,16 +99,12 @@ export class GameplayRenderer {
     this.ctx = canvas.getContext("2d")!;
 
     engine.on("towerFired", (e) => {
-      const sourcePosition = e["sourcePosition"] as Position | undefined;
-      const targetPosition = e["targetPosition"] as Position | undefined;
-      if (sourcePosition && targetPosition) {
-        this.activeProjectiles.push({
-          from: sourcePosition,
-          to: targetPosition,
-          born: this.frameCount,
-          ttl: 8,
-        });
-      }
+      this.activeProjectiles.push({
+        from: e.sourcePosition,
+        to: e.targetPosition,
+        born: this.frameCount,
+        ttl: 8,
+      });
     });
   }
 

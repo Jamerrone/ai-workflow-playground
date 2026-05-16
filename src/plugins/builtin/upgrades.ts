@@ -8,6 +8,12 @@ import {
   type UpgradeOpDef,
   type UpgradeOpValidationResult,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    upgradePurchased: { kind: "upgradePurchased"; tick: number; tower: string; upgrade: string; delta: number; amount: number };
+  }
+}
 import {
   checkKind,
   validateUpgradeOpFields,

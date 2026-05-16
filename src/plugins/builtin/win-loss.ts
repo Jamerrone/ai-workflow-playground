@@ -6,6 +6,13 @@ import {
   type Position,
 } from "../../types.js";
 
+declare module "../../types.js" {
+  interface GameEvents {
+    scenarioLost: { kind: "scenarioLost"; tick: number };
+    scenarioWon: { kind: "scenarioWon"; tick: number };
+  }
+}
+
 interface WaveState {
   nextIndex: number;
   active: boolean;

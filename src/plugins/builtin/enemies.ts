@@ -8,6 +8,12 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    enemyAttacked: { kind: "enemyAttacked"; tick: number; enemy: string; guard: string; attackId: string };
+  }
+}
 import {
   type AttackData,
   matchesFilter,

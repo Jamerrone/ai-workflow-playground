@@ -8,117 +8,69 @@ import type { Engine } from "../../../src/index.js";
 export class AudioRenderer {
   constructor(engine: Engine) {
     engine.on("scenarioWon", (e) => {
-      log(e["tick"] as number, "SCENARIO WON");
+      log(e.tick, "SCENARIO WON");
     });
 
     engine.on("scenarioLost", (e) => {
-      log(e["tick"] as number, "SCENARIO LOST");
+      log(e.tick, "SCENARIO LOST");
     });
 
     engine.on("waveStarted", (e) => {
-      const waveIndex = e["waveIndex"] as number;
-      const trigger = e["trigger"] as string;
-      log(
-        e["tick"] as number,
-        `wave ${waveIndex + 1} started (trigger=${trigger})`,
-      );
+      log(e.tick, `wave ${e.waveIndex + 1} started (trigger=${e.trigger})`);
     });
 
     engine.on("waveCleared", (e) => {
-      const waveIndex = e["waveIndex"] as number;
-      log(e["tick"] as number, `wave ${waveIndex + 1} cleared`);
+      log(e.tick, `wave ${e.waveIndex + 1} cleared`);
     });
 
     engine.on("towerPlaced", (e) => {
-      const tower = e["tower"] as string;
-      const archetype = e["archetype"] as string;
-      log(e["tick"] as number, `tower placed: ${archetype} (id=${tower})`);
+      log(e.tick, `tower placed: ${e.archetype} (id=${e.tower})`);
     });
 
     engine.on("towerSold", (e) => {
-      const tower = e["tower"] as string;
-      const archetype = e["archetype"] as string;
-      log(e["tick"] as number, `tower sold: ${archetype} (id=${tower})`);
+      log(e.tick, `tower sold: ${e.archetype} (id=${e.tower})`);
     });
 
     engine.on("upgradePurchased", (e) => {
-      const tower = e["tower"] as string;
-      const upgrade = e["upgrade"] as string;
-      log(e["tick"] as number, `upgrade purchased: ${upgrade} on ${tower}`);
+      log(e.tick, `upgrade purchased: ${e.upgrade} on ${e.tower}`);
     });
 
     engine.on("targetingOverridden", (e) => {
-      const tower = e["tower"] as string;
-      log(e["tick"] as number, `targeting overridden: ${tower}`);
+      log(e.tick, `targeting overridden: ${e.tower}`);
     });
 
     engine.on("towerFired", (e) => {
-      const source = e["source"] as string;
-      const target = e["target"] as string;
-      const attackId = e["attackId"] as string;
-      log(
-        e["tick"] as number,
-        `tower fired: ${source} → ${target} (attack=${attackId})`,
-      );
+      log(e.tick, `tower fired: ${e.source} → ${e.target} (attack=${e.attackId})`);
     });
 
     engine.on("damageApplied", (e) => {
-      const source = e["source"] as string | undefined;
-      const target = e["target"] as string;
-      const amount = e["amount"] as number;
-      log(
-        e["tick"] as number,
-        `damage: ${source ?? "?"} → ${target} (-${amount})`,
-      );
+      log(e.tick, `damage: ${e.source} → ${e.target} (-${e.amount})`);
     });
 
     engine.on("splashApplied", (e) => {
-      const source = e["source"] as string | undefined;
-      const targets = (e["targets"] as ReadonlyArray<string> | undefined) ?? [];
-      const amount = e["amount"] as number;
-      const radius = e["radius"] as number;
-      log(
-        e["tick"] as number,
-        `splash: ${source ?? "?"} → ${targets.length} target${targets.length === 1 ? "" : "s"} (-${amount} each, r=${radius})`,
-      );
+      const n = e.targets.length;
+      log(e.tick, `splash: ${e.source} → ${n} target${n === 1 ? "" : "s"} (-${e.amount} each, r=${e.radius})`);
     });
 
     engine.on("enemyKilled", (e) => {
-      const enemy = e["enemy"] as string;
-      const killReward = e["killReward"] as number;
-      log(e["tick"] as number, `enemy killed: ${enemy} (+${killReward}g)`);
+      log(e.tick, `enemy killed: ${e.enemy} (+${e.killReward}g)`);
     });
 
     engine.on("enemyReachedBase", (e) => {
-      const enemy = e["enemy"] as string;
-      const base = e["base"] as string;
-      const damage = e["damage"] as number;
-      log(
-        e["tick"] as number,
-        `enemy reached base: ${enemy} → ${base} (-${damage}hp)`,
-      );
+      log(e.tick, `enemy reached base: ${e.enemy} → ${e.base} (-${e.damage}hp)`);
     });
 
     engine.on("baseDamaged", (e) => {
-      const base = e["base"] as string;
-      const damage = e["damage"] as number;
-      const remainingHp = e["remainingHp"] as number;
-      log(
-        e["tick"] as number,
-        `base damaged: ${base} -${damage} (${remainingHp}hp left)`,
-      );
+      log(e.tick, `base damaged: ${e.base} -${e.damage} (${e.remainingHp}hp left)`);
     });
 
     engine.on("guardDied", (e) => {
-      const guard = e["guard"] as string;
-      log(e["tick"] as number, `guard died: ${guard}`);
+      log(e.tick, `guard died: ${e.guard}`);
     });
 
     engine.on("goldChanged", (e) => {
-      const delta = e["delta"] as number;
-      const amount = e["amount"] as number;
-      const sign = delta >= 0 ? "+" : "";
-      log(e["tick"] as number, `gold ${sign}${delta} → ${amount}`);
+      const sign = e.delta >= 0 ? "+" : "";
+      log(e.tick, `gold ${sign}${e.delta} → ${e.amount}`);
     });
   }
 }

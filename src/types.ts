@@ -47,6 +47,10 @@ export interface GameEvent {
   readonly [extra: string]: unknown;
 }
 
+// Registry of typed event payloads, keyed by event kind. Augmented via
+// `declare module` in each plugin that emits events.
+export interface GameEvents {}
+
 export type EventHandler<E extends GameEvent = GameEvent> = (event: E) => void;
 
 export interface Position {
@@ -451,6 +455,7 @@ export interface SaveOptions {
 export interface Engine {
   tick(dt: number): void;
   dispose(): void;
+  on<K extends keyof GameEvents>(kind: K, handler: (event: GameEvents[K]) => void): () => void;
   on(kind: string, handler: EventHandler): () => void;
   onEvent(handler: EventHandler): () => void;
   loadScenario(scenarioId: string): void;
