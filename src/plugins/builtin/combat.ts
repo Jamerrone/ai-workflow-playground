@@ -8,6 +8,7 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
+import { matchesFilter } from "./attack-shared.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -16,7 +17,6 @@ declare module "../../types.js" {
     goldChanged: { kind: "goldChanged"; tick: number; delta: number; amount: number };
   }
 }
-import { matchesFilter } from "./attack-shared.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };

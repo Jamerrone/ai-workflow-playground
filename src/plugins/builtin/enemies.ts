@@ -8,12 +8,6 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
-
-declare module "../../types.js" {
-  interface GameEvents {
-    enemyAttacked: { kind: "enemyAttacked"; tick: number; enemy: string; guard: string; attackId: string };
-  }
-}
 import {
   type AttackData,
   matchesFilter,
@@ -22,6 +16,12 @@ import {
 import { checkKind, validateAttackEffectFields } from "../../loader/validator-helpers.js";
 import { isObject } from "../../loader/normalize.js";
 import type { BucketValidatorContext } from "../../loader/types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    enemyAttacked: { kind: "enemyAttacked"; tick: number; enemy: string; guard: string; attackId: string };
+  }
+}
 
 export interface EnemyArchetype {
   readonly tags: readonly string[];

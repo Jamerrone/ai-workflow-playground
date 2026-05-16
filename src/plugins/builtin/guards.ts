@@ -17,6 +17,16 @@ import {
   type UpgradeOpContext,
   type UpgradeOpDef,
 } from "../../types.js";
+import {
+  type AttackData,
+  matchesFilter,
+  entityTags,
+} from "./attack-shared.js";
+import {
+  validateRallyPoint,
+  type RallyPointFailureReason,
+  type RallyPointMapShape,
+} from "./rally-point.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -28,16 +38,6 @@ declare module "../../types.js" {
     rallyPointMoved: { kind: "rallyPointMoved"; tick: number; tower: string; position: Position };
   }
 }
-import {
-  type AttackData,
-  matchesFilter,
-  entityTags,
-} from "./attack-shared.js";
-import {
-  validateRallyPoint,
-  type RallyPointFailureReason,
-  type RallyPointMapShape,
-} from "./rally-point.js";
 
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = {
