@@ -1,3 +1,10 @@
+export interface ComponentRegistry {}
+
+export interface EntityComponents {
+  get<K extends keyof ComponentRegistry>(name: K): ComponentRegistry[K] | undefined;
+  has<K extends keyof ComponentRegistry>(name: K): boolean;
+}
+
 export interface ConfigRegistry {
   components: Record<string, unknown>;
   entityKinds: Record<string, unknown>;
@@ -176,7 +183,7 @@ export interface TargetingStrategyConfig {
 
 export interface TargetingCandidate {
   readonly id: string;
-  readonly components: ReadonlyMap<string, unknown>;
+  readonly components: EntityComponents;
 }
 
 export interface TargetingContext {

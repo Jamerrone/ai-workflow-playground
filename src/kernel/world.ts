@@ -1,6 +1,6 @@
 export interface Entity {
   readonly id: string;
-  readonly components: ReadonlyMap<string, unknown>;
+  readonly components: import("../types.js").EntityComponents;
 }
 
 export interface QuerySpec {
@@ -23,7 +23,7 @@ interface InternalEntity {
   components: Map<string, unknown>;
 }
 
-import type { Phase } from "../types.js";
+import type { Phase, ComponentRegistry, EntityComponents } from "../types.js";
 
 export class WorldImpl {
   private entities = new Map<string, InternalEntity>();
@@ -131,6 +131,17 @@ export class WorldImpl {
   }
 
   private snapshot(e: InternalEntity): Entity {
-    return { id: e.id, components: new Map(e.components) };
+    const map = new Map(e.components);
+    return {
+      id: e.id,
+      components: {
+        get<K extends keyof ComponentRegistry>(name: K): ComponentRegistry[K] | undefined {
+          return map.get(name as string) as ComponentRegistry[K] | undefined;
+        },
+        has<K extends keyof ComponentRegistry>(name: K): boolean {
+          return map.has(name as string);
+        },
+      } as EntityComponents,
+    };
   }
 }

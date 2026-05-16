@@ -65,7 +65,7 @@ function dist(a: Position, b: Position): number {
 }
 
 function entityTags(world: AttackEffectContext["world"], id: string): readonly string[] {
-  const enemy = world.get(id)?.components.get("enemy") as { tags?: readonly string[] } | undefined;
+  const enemy = world.get(id)?.components.get("enemy");
   return enemy?.tags ?? [];
 }
 
@@ -86,8 +86,8 @@ function matchesFilter(
 function applyDamage(ctx: AttackEffectContext, targetId: string, amount: number): void {
   const e = ctx.world.get(targetId);
   if (!e) return;
-  const health = e.components.get("health") as Record<string, unknown> | undefined;
-  if (health === undefined || typeof health.hp !== "number") return;
+  const health = e.components.get("health");
+  if (health === undefined) return;
   const newHp = health.hp - amount;
   ctx.world.mutate(targetId, "health", () => ({ ...health, hp: newHp }));
 }
@@ -145,7 +145,7 @@ const splashEffect: AttackEffectDef = {
     const hit: string[] = [];
     const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
     for (const e of enemies) {
-      const pos = e.components.get("position") as Position;
+      const pos = e.components.get("position")!;
       if (dist(pos, impact) <= radius) {
         applyDamage(ctx, e.id, amount);
         hit.push(e.id);
@@ -169,7 +169,7 @@ const splashEffect: AttackEffectDef = {
     const impact = fireContext.primaryTarget.position;
     let count = 0;
     for (const e of fireContext.world.query({ all: ["enemy", "position", "health"] })) {
-      const pos = e.components.get("position") as Position;
+      const pos = e.components.get("position")!;
       if (dist(pos, impact) <= radius) count++;
     }
     return amount * count;
@@ -277,7 +277,7 @@ function pierceReachable(
   else axis = "diag";
   const enemies = world.query({ all: ["enemy", "position", "health"] });
   return enemies
-    .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
+    .map((e) => ({ id: e.id, pos: e.components.get("position")! }))
     .filter(({ pos }) => {
       if (axis === "x") return pos.y === src.y && Math.sign(pos.x - src.x) === Math.sign(dx);
       if (axis === "y") return pos.x === src.x && Math.sign(pos.y - src.y) === Math.sign(dy);
@@ -354,7 +354,7 @@ const bounceEffect: AttackEffectDef = {
     for (let i = 0; i < hops; i++) {
       const next = enemies
         .filter((e) => !struck.has(e.id))
-        .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
+        .map((e) => ({ id: e.id, pos: e.components.get("position")! }))
         .sort((a, b) => dist(a.pos, from) - dist(b.pos, from))[0];
       if (!next) break;
       struck.add(next.id);
@@ -383,7 +383,7 @@ const bounceEffect: AttackEffectDef = {
     for (let i = 0; i < hops; i++) {
       const next = enemies
         .filter((e) => !struck.has(e.id))
-        .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
+        .map((e) => ({ id: e.id, pos: e.components.get("position")! }))
         .sort((a, b) => dist(a.pos, from) - dist(b.pos, from))[0];
       if (!next) break;
       struck.add(next.id);
@@ -435,8 +435,8 @@ const targetCountEffect: AttackEffectDef = {
     const enemies = ctx.world
       .query({ all: ["enemy", "position", "health"] })
       .filter((e) => matchesFilter(entityTags(ctx.world, e.id), filter))
-      .filter((e) => dist(e.components.get("position") as Position, ctx.fire.source.position) <= range)
-      .map((e) => ({ id: e.id, pos: e.components.get("position") as Position }))
+      .filter((e) => dist(e.components.get("position")!, ctx.fire.source.position) <= range)
+      .map((e) => ({ id: e.id, pos: e.components.get("position")! }))
       .sort((a, b) => dist(a.pos, from) - dist(b.pos, from))
       .slice(0, count);
     ctx.state.targets = enemies.map((e) => e.id);
@@ -477,8 +477,29 @@ const projectileCountEffect: AttackEffectDef = {
 function addStatus(ctx: AttackEffectContext, targetId: string, entry: StatusEntry): void {
   const target = ctx.world.get(targetId);
   if (!target) return;
-  const existing = (target.components.get(STATUS_COMPONENT) as StatusEntry[] | undefined) ?? [];
+  const existing = target.components.get("statusEffects") ?? [];
   ctx.world.mutate(targetId, STATUS_COMPONENT, () => [...existing, entry]);
+}
+
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    pendingFires: {
+      queue: Array<{
+        source: { id: string; position: Position };
+        primaryTarget: { id: string; position: Position };
+        attack: {
+          id: string;
+          stats: Record<string, unknown>;
+          targetFilter?: { require?: readonly string[]; exclude?: readonly string[] };
+        };
+        effects: ReadonlyArray<import("../../types.js").AttackEffectConfig>;
+      }>;
+    };
+    statusEffects: ReadonlyArray<
+      | { kind: "slow"; id?: string; factor: number; remaining: number }
+      | { kind: "dot"; id?: string; damagePerTick: number; interval: number; remaining: number; sinceLastTick: number }
+    >;
+  }
 }
 
 export const attackEffectsPlugin: Plugin = {
@@ -510,9 +531,7 @@ export const attackEffectsPlugin: Plugin = {
       writes: ["pendingFires", "health", "statusEffects"],
       run(ctx) {
         const stateEntity = ctx.world.get(PENDING_FIRES_ENTITY);
-        const state = stateEntity?.components.get(FIRES_COMPONENT) as
-          | { queue: PendingFire[] }
-          | undefined;
+        const state = stateEntity?.components.get("pendingFires");
         if (!state || state.queue.length === 0) return;
         const queue = state.queue;
         ctx.world.mutate(PENDING_FIRES_ENTITY, FIRES_COMPONENT, () => ({ queue: [] }));
@@ -558,7 +577,8 @@ export const attackEffectsPlugin: Plugin = {
       run(ctx) {
         const targets = ctx.world.query({ all: [STATUS_COMPONENT] });
         for (const t of targets) {
-          const entries = t.components.get(STATUS_COMPONENT) as StatusEntry[];
+          const entries = t.components.get("statusEffects");
+          if (!entries) continue;
           if (entries.length === 0) continue;
           const next: StatusEntry[] = [];
           for (const entry of entries) {
@@ -567,7 +587,7 @@ export const attackEffectsPlugin: Plugin = {
               const remaining = entry.remaining - ctx.dt;
               let nextSince = sinceLastTick;
               if (sinceLastTick >= entry.interval) {
-                const hp = (t.components.get("health") as { hp: number } | undefined)?.hp;
+                const hp = t.components.get("health")?.hp;
                 if (hp !== undefined) {
                   ctx.world.mutate(t.id, "health", () => ({ hp: hp - entry.damagePerTick }));
                 }

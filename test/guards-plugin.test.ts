@@ -587,8 +587,8 @@ describe("guards plugin: skeleton", () => {
       // - inject enemy, tick once: guard engages and damages it.
       // - kill enemy; idle regen restores HP.
       // - emit waveCleared; HP returns to max instantly.
-      const damage = (g: { components: ReadonlyMap<string, unknown> }) =>
-        (g.components.get("health") as { hp: number }).hp;
+      const damage = (g: { components: { get(name: "health"): { hp: number; max?: number } | undefined } }) =>
+        (g.components.get("health")?.hp ?? 0);
 
       const collected = {
         spawnTickPositions: [] as Array<{ x: number; y: number }>,

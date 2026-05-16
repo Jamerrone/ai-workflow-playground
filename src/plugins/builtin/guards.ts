@@ -114,6 +114,18 @@ function rallyFailureMessage(
   }
 }
 
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    guard: { archetype: string; tags: readonly string[] };
+    summon: { summons: string; maxCount: number; respawnCooldown: number; rallyPointRange: number };
+    summonState: { aliveGuards: string[]; respawnTimer: number; pendingRespawns: number };
+    rallyPoint: { x: number; y: number };
+    parent: { tower: string };
+    engagement: { target?: string };
+    guardModifiers: ReadonlyArray<{ attackId: string; effectKind: string; field: string; delta: number }>;
+  }
+}
+
 export const guardsPlugin: Plugin = {
   id: "guards",
   register(api) {
@@ -149,10 +161,7 @@ export const guardsPlugin: Plugin = {
           field: string;
           delta: number;
         };
-        const existing =
-          (ctx.tower.components.get("guardModifiers") as
-            | ReadonlyArray<unknown>
-            | undefined) ?? [];
+        const existing = ctx.tower.components.get("guardModifiers") ?? [];
         ctx.world.mutate(ctx.tower.id, "guardModifiers", () => [
           ...existing,
           { ...op },
@@ -174,14 +183,13 @@ export const guardsPlugin: Plugin = {
         const amount = (ctx.effect.stats as { amount: number }).amount;
         for (const id of ctx.state.targets) {
           const target = ctx.world.get(id);
-          const h = target?.components.get("health") as
-            | { hp: number; max: number }
-            | undefined;
+          const h = target?.components.get("health");
           if (!h) continue;
-          const delta = Math.min(amount, h.max - h.hp);
+          const hMax = h.max ?? h.hp;
+          const delta = Math.min(amount, hMax - h.hp);
           if (delta <= 0) continue;
           const next = h.hp + delta;
-          ctx.world.mutate(id, "health", () => ({ ...h, hp: next }));
+          ctx.world.mutate(id, "health", () => ({ ...h, max: hMax, hp: next }));
           ctx.emit({
             kind: "entityHealed",
             tick: ctx.tickIndex,
@@ -260,7 +268,7 @@ export const guardsPlugin: Plugin = {
         const position = (event as { position?: Position }).position;
         if (!towerId || !position) return;
         const tower = ctx.world.get(towerId);
-        const summon = tower?.components.get("summon") as SummonConfig | undefined;
+        const summon = tower?.components.get("summon");
         if (!summon) return;
 
         const aliveGuards: string[] = [];
@@ -286,15 +294,16 @@ export const guardsPlugin: Plugin = {
       eventKind: "waveCleared",
       apply(ctx: RewardContext) {
         for (const g of ctx.world.query({ all: ["guard", "health"] })) {
-          const h = g.components.get("health") as { hp: number; max: number };
-          if (h.hp >= h.max) continue;
-          ctx.world.mutate(g.id, "health", () => ({ ...h, hp: h.max }));
+          const h = g.components.get("health")!;
+          if (h.hp >= (h.max ?? h.hp)) continue;
+          const hMax = h.max ?? h.hp;
+          ctx.world.mutate(g.id, "health", () => ({ ...h, hp: hMax }));
           ctx.emit({
             kind: "entityHealed",
             tick: ctx.tickIndex,
             entity: g.id,
-            delta: h.max - h.hp,
-            hp: h.max,
+            delta: hMax - h.hp,
+            hp: hMax,
           });
         }
       },
@@ -311,9 +320,9 @@ export const guardsPlugin: Plugin = {
       run(ctx) {
         const dead = ctx.world
           .query({ all: ["guard", "health"] })
-          .filter((g) => (g.components.get("health") as { hp: number }).hp <= 0);
+          .filter((g) => (g.components.get("health")?.hp ?? 1) <= 0);
         for (const g of dead) {
-          const parent = g.components.get("parent") as { tower: string };
+          const parent = g.components.get("parent")!;
           ctx.world.destroy(g.id);
           ctx.emit({
             kind: "guardDied",
@@ -335,8 +344,8 @@ export const guardsPlugin: Plugin = {
         const towerId = (event as { tower?: string }).tower;
         if (!towerId) return;
         for (const g of ctx.world.query({ all: ["guard", "parent"] })) {
-          const parent = g.components.get("parent") as { tower: string };
-          if (parent.tower !== towerId) continue;
+          const parent = g.components.get("parent");
+          if (parent?.tower !== towerId) continue;
           ctx.world.destroy(g.id);
           ctx.emit({
             kind: "guardDespawned",
@@ -358,7 +367,7 @@ export const guardsPlugin: Plugin = {
         const towerId = (event as { tower?: string }).tower;
         if (!guardId || !towerId) return;
         const tower = ctx.world.get(towerId);
-        const state = tower?.components.get("summonState") as SummonState | undefined;
+        const state = tower?.components.get("summonState");
         if (!state) return;
         const next: SummonState = {
           aliveGuards: state.aliveGuards.filter((id) => id !== guardId),
@@ -383,13 +392,12 @@ export const guardsPlugin: Plugin = {
           { speed?: number } | undefined
         >;
         for (const g of ctx.world.query({ all: ["guard", "position", "parent"] })) {
-          const parent = g.components.get("parent") as { tower: string };
+          const parent = g.components.get("parent")!;
           const tower = ctx.world.get(parent.tower);
-          const rally = tower?.components.get("rallyPoint") as Position | undefined;
+          const rally = tower?.components.get("rallyPoint");
           if (!rally) continue;
-          const pos = g.components.get("position") as Position;
-          const archetypeId = (g.components.get("guard") as { archetype: string })
-            .archetype;
+          const pos = g.components.get("position")!;
+          const archetypeId = g.components.get("guard")!.archetype;
           const speed = summonsBucket[archetypeId]?.speed ?? 0;
           if (speed <= 0) continue;
           const dx = rally.x - pos.x;
@@ -429,24 +437,14 @@ export const guardsPlugin: Plugin = {
           all: ["guard", "position", "engagement"],
         });
         for (const g of guards) {
-          const gPos = g.components.get("position") as Position;
-          const parent = g.components.get("parent") as
-            | { tower: string }
-            | undefined;
+          const gPos = g.components.get("position")!;
+          const parent = g.components.get("parent");
           const tower = parent ? ctx.world.get(parent.tower) : undefined;
-          const baseAttacks =
-            (g.components.get("attacks") as
-              | ReadonlyArray<AttackData>
-              | undefined) ?? [];
-          const modifiers =
-            (tower?.components.get("guardModifiers") as
-              | ReadonlyArray<GuardModifier>
-              | undefined) ?? [];
+          const baseAttacks = g.components.get("attacks") ?? [];
+          const modifiers = tower?.components.get("guardModifiers") ?? [];
           const attacks = applyGuardModifiers(baseAttacks, modifiers);
           if (attacks.length === 0) {
-            const cur = g.components.get("engagement") as
-              | { target?: string }
-              | undefined;
+            const cur = g.components.get("engagement");
             if (cur?.target) {
               ctx.world.mutate(g.id, "engagement", () => ({}));
             }
@@ -454,15 +452,11 @@ export const guardsPlugin: Plugin = {
           }
 
           // Check existing engagement for stickiness.
-          const cur = g.components.get("engagement") as
-            | { target?: string }
-            | undefined;
+          const cur = g.components.get("engagement");
           if (cur?.target) {
             const target = ctx.world.get(cur.target);
             if (target) {
-              const tPos = target.components.get("position") as
-                | Position
-                | undefined;
+              const tPos = target.components.get("position");
               if (tPos) {
                 const dx = tPos.x - gPos.x;
                 const dy = tPos.y - gPos.y;
@@ -483,7 +477,7 @@ export const guardsPlugin: Plugin = {
           // range.
           const enemies = ctx.world.query({ all: ["enemy", "position"] });
           const eligible = enemies.filter((e) => {
-            const ePos = e.components.get("position") as Position;
+            const ePos = e.components.get("position")!;
             const dx = ePos.x - gPos.x;
             const dy = ePos.y - gPos.y;
             const distSq = dx * dx + dy * dy;
@@ -496,7 +490,7 @@ export const guardsPlugin: Plugin = {
           if (eligible.length === 0) continue;
 
           const targetingConfig: TargetingStrategyConfig =
-            (tower?.components.get("targeting") as TargetingStrategyConfig | undefined) ??
+            tower?.components.get("targeting") ??
             DEFAULT_TARGETING;
           const strategyDef = ctx.targetingStrategies.get(targetingConfig.kind);
           if (!strategyDef) continue;
@@ -556,29 +550,23 @@ export const guardsPlugin: Plugin = {
         for (const g of ctx.world.query({
           all: ["guard", "engagement", "position", "attacks", "cooldownTimer"],
         })) {
-          const eng = g.components.get("engagement") as { target?: string };
+          const eng = g.components.get("engagement")!;
           if (!eng.target) continue;
           const enemy = ctx.world.get(eng.target);
           if (!enemy) continue;
-          const cd = g.components.get("cooldownTimer") as { remaining: number };
+          const cd = g.components.get("cooldownTimer")!;
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
           ctx.world.mutate(g.id, "cooldownTimer", () => ({ remaining: newRemaining }));
           if (newRemaining > 0) continue;
 
-          const parent = g.components.get("parent") as { tower: string };
+          const parent = g.components.get("parent")!;
           const tower = ctx.world.get(parent.tower);
-          const modifiers =
-            (tower?.components.get("guardModifiers") as
-              | ReadonlyArray<GuardModifier>
-              | undefined) ?? [];
-          const baseAttacks =
-            (g.components.get("attacks") as
-              | ReadonlyArray<AttackData>
-              | undefined) ?? [];
+          const modifiers = tower?.components.get("guardModifiers") ?? [];
+          const baseAttacks = g.components.get("attacks") ?? [];
           const attacks = applyGuardModifiers(baseAttacks, modifiers);
 
-          const gPos = g.components.get("position") as Position;
-          const ePos = enemy.components.get("position") as Position;
+          const gPos = g.components.get("position")!;
+          const ePos = enemy.components.get("position")!;
           const targetTags = entityTags(enemy.components);
           const dx = ePos.x - gPos.x;
           const dy = ePos.y - gPos.y;
@@ -596,7 +584,7 @@ export const guardsPlugin: Plugin = {
           if (eligible.length === 0) continue;
 
           const towerArchetypeId = tower
-            ? (tower.components.get("tower") as { archetype: string }).archetype
+            ? tower.components.get("tower")?.archetype
             : undefined;
           const towerDef = towerArchetypeId
             ? (ctx.registry.towers as Record<
@@ -656,17 +644,15 @@ export const guardsPlugin: Plugin = {
           { idleRegen?: number } | undefined
         >;
         for (const g of ctx.world.query({ all: ["guard", "health"] })) {
-          const eng = g.components.get("engagement") as
-            | { target?: string }
-            | undefined;
+          const eng = g.components.get("engagement");
           if (eng?.target) continue;
-          const archetypeId = (g.components.get("guard") as { archetype: string })
-            .archetype;
+          const archetypeId = g.components.get("guard")!.archetype;
           const idleRegen = summonsBucket[archetypeId]?.idleRegen ?? 0;
           if (idleRegen <= 0) continue;
-          const h = g.components.get("health") as { hp: number; max: number };
-          if (h.hp >= h.max) continue;
-          const next = Math.min(h.max, h.hp + idleRegen * ctx.dt);
+          const h = g.components.get("health")!;
+          const hMax = h.max ?? h.hp;
+          if (h.hp >= hMax) continue;
+          const next = Math.min(hMax, h.hp + idleRegen * ctx.dt);
           ctx.world.mutate(g.id, "health", () => ({ ...h, hp: next }));
         }
       },
@@ -683,10 +669,10 @@ export const guardsPlugin: Plugin = {
       run(ctx) {
         const towers = ctx.world.query({ all: ["summon", "summonState", "position"] });
         for (const t of towers) {
-          const summon = t.components.get("summon") as SummonConfig;
-          const state = t.components.get("summonState") as SummonState;
+          const summon = t.components.get("summon")!;
+          const state = t.components.get("summonState")!;
           if (state.pendingRespawns <= 0) continue;
-          const position = t.components.get("position") as Position;
+          const position = t.components.get("position")!;
           const newTimer = state.respawnTimer + ctx.dt;
           if (newTimer < summon.respawnCooldown) {
             ctx.world.mutate(t.id, "summonState", () => ({
@@ -713,14 +699,14 @@ export const guardsPlugin: Plugin = {
         if (!tower || !tower.components.has("tower")) {
           return actionFailure("UNKNOWN_TOWER", `Tower entity '${a.tower}' not found.`);
         }
-        const summon = tower.components.get("summon") as SummonConfig | undefined;
+        const summon = tower.components.get("summon");
         if (!summon) {
           return actionFailure(
             "UNKNOWN_TOWER",
             `Tower '${a.tower}' has no summon Component.`,
           );
         }
-        const towerPos = tower.components.get("position") as Position;
+        const towerPos = tower.components.get("position")!;
         const scenario = (ctx.registry.scenarios as Record<
           string,
           { map: string } | undefined

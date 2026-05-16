@@ -29,12 +29,12 @@ interface AttackEffectEntry {
   [extra: string]: unknown;
 }
 
-interface AttackConfig {
+type MutableAttackEntry = {
   id: string;
   stats: Record<string, number>;
-  effects?: AttackEffectEntry[];
-  [extra: string]: unknown;
-}
+  effects?: Array<{ id?: string; kind: string; stats?: Record<string, number>; [key: string]: unknown }>;
+  [key: string]: unknown;
+};
 
 interface UpgradeConfig {
   readonly tower?: string;
@@ -53,7 +53,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 function resolveTargetStats(
-  attacks: AttackConfig[],
+  attacks: MutableAttackEntry[],
   attackId: string,
   effectId: string | undefined,
 ): Record<string, number> | undefined {
@@ -87,9 +87,9 @@ function mutateAttackStats(
   effectId: string | undefined,
   mutator: (stats: Record<string, number>) => void,
 ): void {
-  const current = ctx.tower.components.get("attacks") as AttackConfig[] | undefined;
+  const current = ctx.tower.components.get("attacks");
   if (!current) return;
-  const next = structuredClone(current);
+  const next = structuredClone(current) as unknown as MutableAttackEntry[];
   const stats = resolveTargetStats(next, attackId, effectId);
   if (!stats) return;
   mutator(stats);
@@ -154,7 +154,7 @@ function purchaseHandler(
   if (!towerEntity || !towerEntity.components.has("tower")) {
     return actionFailure("UNKNOWN_TOWER", `Tower entity '${action.tower}' not found.`);
   }
-  const archetypeId = (towerEntity.components.get("tower") as { archetype: string }).archetype;
+  const archetypeId = towerEntity.components.get("tower")!.archetype;
   const archetype = (ctx.registry.towers as Record<string, TowerArchetypeConfig>)[archetypeId];
   const upgradeTree = archetype?.upgradeTree ?? [];
   if (!upgradeTree.includes(action.upgrade)) {
@@ -170,7 +170,7 @@ function purchaseHandler(
       `Upgrade '${action.upgrade}' not found in registry.`,
     );
   }
-  const purchased = (towerEntity.components.get("purchasedUpgrades") as string[] | undefined) ?? [];
+  const purchased = towerEntity.components.get("purchasedUpgrades") ?? [];
   if (purchased.includes(action.upgrade)) {
     return actionFailure(
       "UPGRADE_ALREADY_PURCHASED",
@@ -198,7 +198,7 @@ function purchaseHandler(
     }
   }
   const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
-  const goldComp = goldEntity?.components.get("gold") as { amount: number } | undefined;
+  const goldComp = goldEntity?.components.get("gold");
   const cost = upgrade.cost ?? 0;
   if (!goldComp || goldComp.amount < cost) {
     return actionFailure(

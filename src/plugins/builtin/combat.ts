@@ -46,24 +46,22 @@ export const combatPlugin: Plugin = {
         const enemies = ctx.world.query({ all: ["enemy", "position", "health"] });
 
         for (const tower of towers) {
-          const towerArche = (tower.components.get("tower") as { archetype: string }).archetype;
+          const towerArche = tower.components.get("tower")!.archetype;
           const towerDef = (ctx.registry.towers as Record<string, any>)[towerArche];
-          const entityAttacks = tower.components.get("attacks") as Array<any> | undefined;
-          const cd = tower.components.get("cooldownTimer") as { remaining: number };
+          const entityAttacks = tower.components.get("attacks");
+          const cd = tower.components.get("cooldownTimer")!;
           const newRemaining = Math.max(0, cd.remaining - ctx.dt);
           // Always write the decremented cooldown so `ctx.fireAttack` reads
           // the post-decrement value when it checks readiness.
           ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: newRemaining }));
           if (newRemaining > 0) continue;
-          const towerPos = tower.components.get("position") as Position;
+          const towerPos = tower.components.get("position")!;
           const attacks = entityAttacks ?? ((towerDef.attacks as Array<any>) ?? []);
           if (attacks.length === 0) {
             ctx.world.mutate(tower.id, "cooldownTimer", () => ({ remaining: 0 }));
             continue;
           }
-          const entityTargeting = tower.components.get("targeting") as
-            | TargetingStrategyConfig
-            | undefined;
+          const entityTargeting = tower.components.get("targeting");
           const targetingConfig: TargetingStrategyConfig =
             entityTargeting ??
             (towerDef.targeting as TargetingStrategyConfig | undefined) ??
@@ -81,9 +79,9 @@ export const combatPlugin: Plugin = {
           const eligibleAttacks: AttackSelectionCandidate[] = [];
           for (const attack of attacks) {
             const eligible = enemies.filter((e) => {
-              const ep = e.components.get("position") as Position;
+              const ep = e.components.get("position")!;
               if (dist(ep, towerPos) > attack.stats.range) return false;
-              const tags = (e.components.get("enemy") as { tags?: string[] } | undefined)?.tags ?? [];
+              const tags = e.components.get("enemy")?.tags ?? [];
               return matchesFilter(tags, attack.targetFilter);
             });
             if (eligible.length === 0) continue;
@@ -117,7 +115,7 @@ export const combatPlugin: Plugin = {
               resolveTarget(a) {
                 const tgt = perAttackTargets.get(a.id);
                 if (!tgt) return undefined;
-                const tp = tgt.components.get("position") as Position;
+                const tp = tgt.components.get("position")!;
                 return { id: tgt.id, position: { ...tp } };
               },
             });
@@ -131,7 +129,7 @@ export const combatPlugin: Plugin = {
             continue;
           }
 
-          const targetPos = firedTarget.components.get("position") as Position;
+          const targetPos = firedTarget.components.get("position")!;
           const fired = ctx.fireAttack({
             attacker: tower.id,
             attack: {
@@ -167,14 +165,14 @@ export const combatPlugin: Plugin = {
       run(ctx) {
         const dead = ctx.world
           .query({ all: ["enemy", "health"] })
-          .filter((e) => (e.components.get("health") as { hp: number }).hp <= 0);
+          .filter((e) => (e.components.get("health")?.hp ?? 1) <= 0);
         if (dead.length === 0) return;
         const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
-        const gold = goldEntity?.components.get("gold") as { amount: number } | undefined;
+        const gold = goldEntity?.components.get("gold");
         let amount = gold?.amount ?? 0;
         const startingAmount = amount;
         for (const e of dead) {
-          const killReward = (e.components.get("enemy") as { killReward: number }).killReward;
+          const killReward = e.components.get("enemy")!.killReward;
           amount += killReward;
           ctx.emit({
             kind: "enemyKilled",

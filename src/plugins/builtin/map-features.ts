@@ -15,7 +15,7 @@ interface BlockedRegion {
   readonly y: number;
   readonly width: number;
   readonly height: number;
-  readonly kind: string;
+  readonly kind?: string;
 }
 
 interface MapPath {
@@ -101,6 +101,12 @@ function validateMap(ctx: BucketValidatorContext): void {
   }
 }
 
+declare module "../../types.js" {
+  interface ComponentRegistry {
+    blockedRegion: { x: number; y: number; width: number; height: number; kind?: string };
+  }
+}
+
 export const mapFeaturesPlugin: Plugin = {
   id: "map-features",
   register(api) {
@@ -148,7 +154,7 @@ export const mapFeaturesPlugin: Plugin = {
         }
         const regionEntities = world.query({ all: ["blockedRegion"] });
         for (const entity of regionEntities) {
-          const r = entity.components.get("blockedRegion") as BlockedRegion | undefined;
+          const r = entity.components.get("blockedRegion");
           if (r && inRegion(position, r)) {
             return {
               ok: false,
@@ -159,7 +165,7 @@ export const mapFeaturesPlugin: Plugin = {
         }
         const towerEntities = world.query({ all: ["tower", "position"] });
         for (const entity of towerEntities) {
-          const pos = entity.components.get("position") as Position | undefined;
+          const pos = entity.components.get("position");
           if (pos && pos.x === position.x && pos.y === position.y) {
             return {
               ok: false,

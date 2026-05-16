@@ -69,21 +69,19 @@ export function validateRallyPoint(
     .query({ all: ["tower", "position"] })
     .some((other) => {
       if (other.id === towerId) return false;
-      const p = other.components.get("position") as Position;
-      return p.x === position.x && p.y === position.y;
+      const p = other.components.get("position");
+      return p && p.x === position.x && p.y === position.y;
     });
   if (towerOnTile) return { ok: false, reason: "tower-occupied" };
 
   const onBlocked = world.query({ all: ["blockedRegion"] }).some((be) => {
-    const r = be.components.get("blockedRegion") as
-      | { x: number; y: number; w: number; h: number }
-      | undefined;
+    const r = be.components.get("blockedRegion");
     if (!r) return false;
     return (
       position.x >= r.x &&
-      position.x < r.x + r.w &&
+      position.x < r.x + r.width &&
       position.y >= r.y &&
-      position.y < r.y + r.h
+      position.y < r.y + r.height
     );
   });
   if (onBlocked) return { ok: false, reason: "blocked-region" };

@@ -116,7 +116,7 @@ export class GameplayRenderer {
     this.currPositions.clear();
     const movers = this.engine.world.query({ all: ["position"] });
     for (const entity of movers) {
-      const pos = entity.components.get("position") as Position | undefined;
+      const pos = entity.components.get("position");
       if (pos) {
         this.currPositions.set(entity.id, { x: pos.x, y: pos.y });
       }
@@ -134,9 +134,7 @@ export class GameplayRenderer {
 
     const blockedRegions = this.engine.world.query({ all: ["blockedRegion"] });
     for (const entity of blockedRegions) {
-      const r = entity.components.get("blockedRegion") as
-        | BlockedRegion
-        | undefined;
+      const r = entity.components.get("blockedRegion");
       if (r) this.drawBlockedRegion(ctx, r);
     }
 
@@ -239,8 +237,7 @@ export class GameplayRenderer {
     cy: number,
     entity: Entity,
   ): void {
-    const archetype = (entity.components.get("tower") as { archetype: string })
-      .archetype;
+    const archetype = entity.components.get("tower")!.archetype;
     const label = this.towerArchetypes[archetype]?.meta?.symbol ?? archetype[0]?.toUpperCase() ?? "?";
     ctx.fillStyle = TOWER_COLOR;
     ctx.fillRect(cx - CELL * 0.3, cy - CELL * 0.3, CELL * 0.6, CELL * 0.6);
@@ -253,9 +250,7 @@ export class GameplayRenderer {
     cy: number,
     entity: Entity,
   ): void {
-    const archetypeId = (
-      entity.components.get("enemy") as { archetype: string }
-    ).archetype;
+    const archetypeId = entity.components.get("enemy")!.archetype;
     const def = this.enemyArchetypes[archetypeId];
     const isAerial =
       def?.tags?.includes("aerial") || def?.tags?.includes("flying");
@@ -268,9 +263,7 @@ export class GameplayRenderer {
     ctx.fill();
     this.drawLabel(ctx, cx, cy, label, "#fff", 13);
 
-    const health = entity.components.get("health") as
-      | { hp: number }
-      | undefined;
+    const health = entity.components.get("health");
     if (health && def) {
       this.drawHpBar(ctx, cx, cy, health.hp, def.stats.hp);
     }
@@ -287,11 +280,9 @@ export class GameplayRenderer {
     ctx.fillStyle = GUARD_COLOR;
     ctx.fill();
 
-    const health = entity.components.get("health") as
-      | { hp: number; max: number }
-      | undefined;
+    const health = entity.components.get("health");
     if (health) {
-      this.drawHpBar(ctx, cx, cy, health.hp, health.max);
+      this.drawHpBar(ctx, cx, cy, health.hp, health.max ?? health.hp);
     }
   }
 
