@@ -295,8 +295,8 @@ export const guardsPlugin: Plugin = {
       apply(ctx: RewardContext) {
         for (const g of ctx.world.query({ all: ["guard", "health"] })) {
           const h = g.components.get("health")!;
-          if (h.hp >= (h.max ?? h.hp)) continue;
           const hMax = h.max ?? h.hp;
+          if (h.hp >= hMax) continue;
           ctx.world.mutate(g.id, "health", () => ({ ...h, hp: hMax }));
           ctx.emit({
             kind: "entityHealed",
@@ -583,9 +583,7 @@ export const guardsPlugin: Plugin = {
             }));
           if (eligible.length === 0) continue;
 
-          const towerArchetypeId = tower
-            ? tower.components.get("tower")?.archetype
-            : undefined;
+          const towerArchetypeId = tower?.components.get("tower")?.archetype;
           const towerDef = towerArchetypeId
             ? (ctx.registry.towers as Record<
                 string,
