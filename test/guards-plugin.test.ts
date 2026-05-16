@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createEngine, Phase } from "../src/index.js";
-import type { GameEvent, Plugin, Position, SystemContext } from "../src/index.js";
+import type { GameEvent, GameEvents, Plugin, Position, SystemContext } from "../src/index.js";
 import { builtInBundle } from "../src/plugins/builtin/index.js";
 import { emptyRegistry } from "./helpers/empty-registry.js";
 
@@ -854,7 +854,7 @@ describe("guards plugin: skeleton", () => {
 
   describe("guardModifier UpgradeOp", () => {
     it("buffs every living Guard's Attack damage immediately, and new spawns inherit", () => {
-      const damageEvents: GameEvent[] = [];
+      const damageEvents: GameEvents["damageApplied"][] = [];
       const probe: Plugin = {
         id: "test/probe",
         register(api) {
@@ -958,9 +958,7 @@ describe("guards plugin: skeleton", () => {
         plugins: [...builtInBundle, probe],
         seed: 0,
       });
-      engine.onEvent((e) => {
-        if (e.kind === "damageApplied") damageEvents.push(e);
-      });
+      engine.on("damageApplied", (e) => damageEvents.push(e));
       engine.loadScenario("s");
       engine.placeTower("barracks", { x: 1, y: 1 });
       // Purchase upgrade BEFORE first tick → buffs the living guard.
@@ -968,12 +966,8 @@ describe("guards plugin: skeleton", () => {
       expect(upRes.ok).toBe(true);
 
       engine.tick(1); // tick 0: enemy injected, guard fires, expects 8 damage
-      const firstDamage = damageEvents
-        .filter((e) => (e as unknown as { target: string }).target === "e:1")
-        .at(0);
-      expect(
-        (firstDamage as unknown as { amount: number } | undefined)?.amount,
-      ).toBe(8);
+      const firstDamage = damageEvents.filter((e) => e.target === "e:1").at(0);
+      expect(firstDamage?.amount).toBe(8);
 
       // Kill the guard at tick 4, advance to respawn.
       engine.tick(1); // 1
@@ -986,12 +980,8 @@ describe("guards plugin: skeleton", () => {
       engine.tick(1); // 7 — new guard engages, hits e:2 with 8 damage
       engine.dispose();
 
-      const secondDamage = damageEvents
-        .filter((e) => (e as unknown as { target: string }).target === "e:2")
-        .at(0);
-      expect(
-        (secondDamage as unknown as { amount: number } | undefined)?.amount,
-      ).toBe(8);
+      const secondDamage = damageEvents.filter((e) => e.target === "e:2").at(0);
+      expect(secondDamage?.amount).toBe(8);
     });
   });
 
@@ -1166,10 +1156,10 @@ describe("guards plugin: skeleton", () => {
       engine.dispose();
 
       expect(observedHp).toBe(7);
-      const healed = captured.find((e) => e.kind === "entityHealed");
+      const healed = captured.find((e): e is GameEvents["entityHealed"] => e.kind === "entityHealed");
       expect(healed).toBeDefined();
-      expect((healed as unknown as { delta: number }).delta).toBe(5);
-      expect((healed as unknown as { hp: number }).hp).toBe(7);
+      expect(healed?.delta).toBe(5);
+      expect(healed?.hp).toBe(7);
     });
 
     it("clamps a heal that would exceed max HP", () => {
@@ -1703,9 +1693,9 @@ describe("guards plugin: skeleton", () => {
     });
 
     it("on success, updates the Tower's rallyPoint and emits rallyPointMoved", () => {
-      const events: GameEvent[] = [];
+      let moved: GameEvents["rallyPointMoved"] | undefined;
       const engine = setupBarracksScenario();
-      engine.onEvent((e) => events.push(e));
+      engine.on("rallyPointMoved", (e) => { moved = e; });
       engine.placeTower("barracks", { x: 1, y: 1 });
 
       const result = engine.dispatch({
@@ -1720,13 +1710,9 @@ describe("guards plugin: skeleton", () => {
         x: 2,
         y: 1,
       });
-      const moved = events.find((e) => e.kind === "rallyPointMoved");
       expect(moved).toBeDefined();
-      expect((moved as unknown as { tower: string }).tower).toBe("tower:barracks:1,1");
-      expect((moved as unknown as { position: Position }).position).toEqual({
-        x: 2,
-        y: 1,
-      });
+      expect(moved?.tower).toBe("tower:barracks:1,1");
+      expect(moved?.position).toEqual({ x: 2, y: 1 });
     });
   });
 

@@ -37,24 +37,19 @@ export class HudRenderer {
     this.bannerEl = container.querySelector("#hud-banner")!;
 
     engine.on("goldChanged", (e) => {
-      const amount = e["amount"] as number;
-      this.goldEl.textContent = String(amount);
+      this.goldEl.textContent = String(e.amount);
     });
 
     engine.on("waveStarted", (e) => {
-      const waveIndex = e["waveIndex"] as number;
-      this.waveEl.textContent = String(waveIndex + 1);
+      this.waveEl.textContent = String(e.waveIndex + 1);
     });
 
     engine.on("waveCleared", (e) => {
-      const waveIndex = e["waveIndex"] as number;
-      this.waveEl.textContent = `${waveIndex + 1} (cleared)`;
+      this.waveEl.textContent = `${e.waveIndex + 1} (cleared)`;
     });
 
     engine.on("baseDamaged", (e) => {
-      const base = e["base"] as string;
-      const remainingHp = e["remainingHp"] as number;
-      this.baseHp.set(base, remainingHp);
+      this.baseHp.set(e.base, e.remainingHp);
       this.renderBases();
     });
 

@@ -7,6 +7,14 @@ import {
   type Plugin,
   type Position,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    projectilesSpawned: { kind: "projectilesSpawned"; tick: number; source: string; target: string; count: number; attackId: string; effectId: string | undefined };
+    projectileExpired: { kind: "projectileExpired"; tick: number; projectile: string; reason: string };
+    projectileHit: { kind: "projectileHit"; tick: number; projectile: string; source: Position; target: Position };
+  }
+}
 import { validateNumberStats } from "./attack-effects.js";
 
 const PENDING_FIRES_ENTITY = "attack-effects/pending";

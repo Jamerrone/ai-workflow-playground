@@ -17,6 +17,17 @@ import {
   type UpgradeOpContext,
   type UpgradeOpDef,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    guardSpawned: { kind: "guardSpawned"; tick: number; guard: string; tower: string; archetype: string; position: Position };
+    entityHealed: { kind: "entityHealed"; tick: number; entity: string; delta: number; hp: number; source?: string; attackId?: string; effectId?: string };
+    guardDied: { kind: "guardDied"; tick: number; guard: string; tower: string };
+    guardDespawned: { kind: "guardDespawned"; tick: number; guard: string; tower: string; reason: string };
+    guardAttacked: { kind: "guardAttacked"; tick: number; guard: string; enemy: string; attackId: string };
+    rallyPointMoved: { kind: "rallyPointMoved"; tick: number; tower: string; position: Position };
+  }
+}
 import {
   type AttackData,
   matchesFilter,

@@ -8,6 +8,14 @@ import {
   type TargetingCandidate,
   type TargetingStrategyConfig,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    towerFired: { kind: "towerFired"; tick: number; source: string; target: string; sourcePosition: Position; targetPosition: Position; attackId: string };
+    enemyKilled: { kind: "enemyKilled"; tick: number; enemy: string; killReward: number };
+    goldChanged: { kind: "goldChanged"; tick: number; delta: number; amount: number };
+  }
+}
 import { matchesFilter } from "./attack-shared.js";
 
 const TOWERS_STATE_ENTITY = "towers/state";

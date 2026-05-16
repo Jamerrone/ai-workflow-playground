@@ -10,6 +10,23 @@ import {
   type Position,
 } from "../../types.js";
 
+declare module "../../types.js" {
+  interface GameEvents {
+    damageApplied: { kind: "damageApplied"; tick: number; source: string; target: string; amount: number; attackId: string; effectId: string | undefined };
+    splashApplied: { kind: "splashApplied"; tick: number; source: string; impact: Position; radius: number; amount: number; attackId: string; effectId: string | undefined; targets: string[] };
+    slowApplied: { kind: "slowApplied"; tick: number; source: string; target: string; factor: number; duration: number; attackId: string; effectId: string | undefined };
+    dotApplied: { kind: "dotApplied"; tick: number; source: string; target: string; damagePerTick: number; interval: number; duration: number; attackId: string; effectId: string | undefined };
+    pierceApplied: { kind: "pierceApplied"; tick: number; source: string; amount: number; maxTargets: number; attackId: string; effectId: string | undefined; targets: string[] };
+    linePierceApplied: { kind: "linePierceApplied"; tick: number; source: string; amount: number; maxTargets: number; attackId: string; effectId: string | undefined; targets: string[] };
+    bounceApplied: { kind: "bounceApplied"; tick: number; source: string; amount: number; hops: number; attackId: string; effectId: string | undefined; chain: string[] };
+    minimumRangeRejected: { kind: "minimumRangeRejected"; tick: number; source: string; target: string; distance: number; range: number; attackId: string; effectId: string | undefined };
+    targetCountApplied: { kind: "targetCountApplied"; tick: number; source: string; count: number; attackId: string; effectId: string | undefined; targets: string[] };
+    projectileCountIntent: { kind: "projectileCountIntent"; tick: number; source: string; target: string; count: number; attackId: string; effectId: string | undefined };
+    attackEffectUnknown: { kind: "attackEffectUnknown"; tick: number; source: string; effectKind: string; attackId: string };
+    dotTicked: { kind: "dotTicked"; tick: number; target: string; amount: number; effectId: string | undefined };
+  }
+}
+
 const PENDING_FIRES_ENTITY = "attack-effects/pending";
 const FIRES_COMPONENT = "pendingFires";
 const STATUS_COMPONENT = "statusEffects";

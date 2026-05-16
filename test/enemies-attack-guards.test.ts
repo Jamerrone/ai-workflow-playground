@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createEngine, Phase } from "../src/index.js";
-import type { GameEvent, Plugin } from "../src/index.js";
+import type { GameEvent, GameEvents, Plugin } from "../src/index.js";
 import { builtInBundle } from "../src/plugins/builtin/index.js";
 import { emptyRegistry } from "./helpers/empty-registry.js";
 
@@ -110,7 +110,7 @@ describe("enemies attack guards via unified pipeline (issue #46)", () => {
     expect(enemyAttacked!.attackId).toBe("stab");
     // The unarmed wall Guard absorbs damage; armed Enemy's damage applies via attack-effects.
     const damages = events.filter(
-      (e) => e.kind === "damageApplied" && (e as unknown as { target: string }).target.startsWith("guard:"),
+      (e): e is GameEvents["damageApplied"] => e.kind === "damageApplied" && (e as GameEvents["damageApplied"]).target.startsWith("guard:"),
     );
     expect(damages.length).toBeGreaterThanOrEqual(1);
     engine.dispose();
@@ -588,8 +588,8 @@ describe("enemies attack guards via unified pipeline (issue #46)", () => {
       },
     });
     engine.on("damageApplied", (e) => {
-      if ((e as unknown as { target: string }).target === "e:1") {
-        damages.push((e as unknown as { amount: number }).amount);
+      if (e.target === "e:1") {
+        damages.push(e.amount);
       }
     });
     engine.placeTower("barracks", { x: 4, y: 1 });

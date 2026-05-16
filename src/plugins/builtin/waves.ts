@@ -7,6 +7,13 @@ import {
   type Plugin,
   type RewardContext,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    waveStarted: { kind: "waveStarted"; tick: number; waveIndex: number; trigger: string };
+    waveCleared: { kind: "waveCleared"; tick: number; waveIndex: number; surviving: number; reward: number };
+  }
+}
 import { checkKind, requireArray } from "../../loader/validator-helpers.js";
 import { isObject } from "../../loader/normalize.js";
 import type { BucketValidatorContext } from "../../loader/types.js";

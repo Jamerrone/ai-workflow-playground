@@ -1,5 +1,12 @@
 import { Phase, type Plugin, type Position } from "../../types.js";
 
+declare module "../../types.js" {
+  interface GameEvents {
+    enemyReachedBase: { kind: "enemyReachedBase"; tick: number; enemy: string; base: string; damage: number };
+    baseDamaged: { kind: "baseDamaged"; tick: number; base: string; damage: number; remainingHp: number };
+  }
+}
+
 interface PathProgress {
   pathId: string;
   wpIndex: number;

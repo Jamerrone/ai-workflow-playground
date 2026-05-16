@@ -30,6 +30,7 @@ export type {
   ActionContext,
   SystemContext,
   GameEvent,
+  GameEvents,
   EventHandler,
   PlayerAction,
   ActionResult,

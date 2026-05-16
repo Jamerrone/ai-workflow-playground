@@ -420,7 +420,7 @@ export function createEngine(
       kindHandlers.clear();
       pending = [];
     },
-    on(kind, handler) {
+    on(kind: string, handler: EventHandler): () => void {
       assertAlive();
       let list = kindHandlers.get(kind);
       if (!list) {

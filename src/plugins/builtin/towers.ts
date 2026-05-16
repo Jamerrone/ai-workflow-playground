@@ -13,6 +13,14 @@ import {
   type SellTowerAction,
   type TargetingStrategyConfig,
 } from "../../types.js";
+
+declare module "../../types.js" {
+  interface GameEvents {
+    towerPlaced: { kind: "towerPlaced"; tick: number; tower: string; archetype: string; position: Position };
+    towerSold: { kind: "towerSold"; tick: number; tower: string; archetype: string; position: Position | undefined; refund: number };
+    targetingOverridden: { kind: "targetingOverridden"; tick: number; tower: string; strategy: TargetingStrategyConfig };
+  }
+}
 import {
   checkKind,
   requireArray,
