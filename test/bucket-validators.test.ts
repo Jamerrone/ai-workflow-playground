@@ -101,6 +101,72 @@ describe("Loader: bucket validator registry", () => {
     }
   });
 
+  it("tower with meta.symbol string is accepted by the built-in validator", () => {
+    const validators = collectBucketValidators(builtInBundle);
+    const input = {
+      ...buildTracerRegistry(),
+      towers: {
+        "archer": {
+          cost: 50,
+          attacks: [{ id: "shot", stats: { range: 3, cooldown: 0.5 }, effects: [{ kind: "damage", stats: { amount: 10 } }] }],
+          meta: { name: "Archer Tower", symbol: "A" },
+        },
+      },
+    } as unknown as LoaderInput;
+    const r = buildRegistry(input, { bucketValidators: validators });
+    expect(r.ok).toBe(true);
+  });
+
+  it("enemy with meta.symbol string is accepted by the built-in validator", () => {
+    const validators = collectBucketValidators(builtInBundle);
+    const input = {
+      ...buildTracerRegistry(),
+      enemies: {
+        grunt: { tags: ["ground"], stats: { hp: 10, speed: 1, baseDamage: 1 }, killReward: 5, meta: { name: "Grunt", symbol: "G" } },
+      },
+    } as unknown as LoaderInput;
+    const r = buildRegistry(input, { bucketValidators: validators });
+    expect(r.ok).toBe(true);
+  });
+
+  it("tower with non-string meta.symbol triggers INVALID_FIELD error", () => {
+    const validators = collectBucketValidators(builtInBundle);
+    const input = {
+      ...buildTracerRegistry(),
+      towers: {
+        "archer": {
+          cost: 50,
+          attacks: [{ id: "shot", stats: { range: 3, cooldown: 0.5 }, effects: [{ kind: "damage", stats: { amount: 10 } }] }],
+          meta: { name: "Archer Tower", symbol: 42 },
+        },
+      },
+    } as unknown as LoaderInput;
+    const r = buildRegistry(input, { bucketValidators: validators });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const err = r.errors.find((e) => e.path === "towers.archer.meta.symbol");
+      expect(err).toBeDefined();
+      expect(err!.code).toBe("INVALID_FIELD");
+    }
+  });
+
+  it("enemy with non-string meta.symbol triggers INVALID_FIELD error", () => {
+    const validators = collectBucketValidators(builtInBundle);
+    const input = {
+      ...buildTracerRegistry(),
+      enemies: {
+        grunt: { tags: ["ground"], stats: { hp: 10, speed: 1, baseDamage: 1 }, killReward: 5, meta: { name: "Grunt", symbol: 99 } },
+      },
+    } as unknown as LoaderInput;
+    const r = buildRegistry(input, { bucketValidators: validators });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const err = r.errors.find((e) => e.path === "enemies.grunt.meta.symbol");
+      expect(err).toBeDefined();
+      expect(err!.code).toBe("INVALID_FIELD");
+    }
+  });
+
   it("a custom bucket's validator can read cross-bucket data via ctx.input", () => {
     // Exercises that the BucketValidatorContext carries the full LoaderInput so
     // custom validators can do their own cross-bucket reference checks.
