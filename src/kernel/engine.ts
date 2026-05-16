@@ -1,5 +1,6 @@
 import { actionFailure } from "./action-result.js";
 import { EngineDisposedError } from "./errors.js";
+import { withTickMath } from "./math-proxy.js";
 import { resolveSystemOrder } from "./ordering.js";
 import { deserializeWorld, serializeWorld } from "./snapshot.js";
 import { WorldImpl } from "./world.js";
@@ -56,6 +57,13 @@ interface QueuedFire {
   effects: ReadonlyArray<AttackEffectConfig>;
 }
 
+interface RegistrationWarning {
+  registry: string;
+  replacedKind: string;
+  replacedBy: string;
+  previousPlugin: string;
+}
+
 interface Registries {
   components: Map<string, ComponentDef>;
   entityKinds: Map<string, EntityKindDef>;
@@ -70,6 +78,7 @@ interface Registries {
   upgradeOps: Map<string, UpgradeOpDef>;
   gameRules: Map<string, GameRuleDef>;
   scenarioLoadHooks: ScenarioLoadHook[];
+  registrationWarnings: RegistrationWarning[];
 }
 
 function loadPlugins(plugins: readonly Plugin[]): Registries {
@@ -88,27 +97,52 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
   const upgradeOps = new Map<string, UpgradeOpDef>();
   const gameRules = new Map<string, GameRuleDef>();
   const scenarioLoadHooks: ScenarioLoadHook[] = [];
+  const registrationWarnings: RegistrationWarning[] = [];
+
+  // Tracks which plugin last registered each "registry:kind" key.
+  const ownersByKey = new Map<string, string>();
+  let currentPluginId = "";
+
+  function trackReg(registry: string, kind: string): void {
+    const key = `${registry}:${kind}`;
+    const prev = ownersByKey.get(key);
+    if (prev !== undefined) {
+      registrationWarnings.push({
+        registry,
+        replacedKind: kind,
+        replacedBy: currentPluginId,
+        previousPlugin: prev,
+      });
+    }
+    ownersByKey.set(key, currentPluginId);
+  }
 
   const api: RegistrationApi = {
     registerComponent(def) {
+      trackReg("components", def.name);
       components.set(def.name, def);
     },
     registerEntityKind(def) {
+      trackReg("entityKinds", def.kind);
       entityKinds.set(def.kind, def);
     },
     registerSystem(def) {
       systemsByPhase.get(def.phase)!.push(def);
     },
     registerActionHandler(def) {
+      trackReg("actionHandlers", def.kind);
       actionHandlers.set(def.kind, def);
     },
     registerPlacementMode(def) {
+      trackReg("placementModes", def.kind);
       placementModes.set(def.kind, def);
     },
     registerMapFeature(def) {
+      trackReg("mapFeatures", def.kind);
       mapFeatures.set(def.kind, def);
     },
     registerAttackEffect(def) {
+      trackReg("attackEffects", def.kind);
       attackEffects.set(def.kind, def);
     },
     registerReward(def) {
@@ -120,15 +154,19 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
       list.push(def);
     },
     registerTargetingStrategy(def) {
+      trackReg("targetingStrategies", def.kind);
       targetingStrategies.set(def.kind, def);
     },
     registerAttackSelectionStrategy(def) {
+      trackReg("attackSelectionStrategies", def.kind);
       attackSelectionStrategies.set(def.kind, def);
     },
     registerUpgradeOp(def) {
+      trackReg("upgradeOps", def.kind);
       upgradeOps.set(def.kind, def);
     },
     registerGameRule(def) {
+      trackReg("gameRules", def.key);
       gameRules.set(def.key, def as GameRuleDef);
     },
     // Bucket validators are Loader-only — the running Engine doesn't consume
@@ -139,7 +177,10 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
       scenarioLoadHooks.push(hook);
     },
   };
-  for (const plugin of plugins) plugin.register(api);
+  for (const plugin of plugins) {
+    currentPluginId = plugin.id;
+    plugin.register(api);
+  }
 
   // Fail fast: every Component an EntityKind references must be registered by
   // some (possibly other) plugin. Validated after all plugins load so two
@@ -169,6 +210,7 @@ function loadPlugins(plugins: readonly Plugin[]): Registries {
     upgradeOps,
     gameRules,
     scenarioLoadHooks,
+    registrationWarnings,
   };
 }
 
@@ -204,6 +246,7 @@ export function createEngine(
     upgradeOps,
     gameRules: gameRuleDefs,
     scenarioLoadHooks,
+    registrationWarnings,
   } = loadPlugins(options.plugins);
   let resolvedGameRules: ReadonlyMap<string, unknown> = resolveGameRules(gameRuleDefs, undefined);
   for (const phase of PHASE_ORDER) {
@@ -363,7 +406,7 @@ export function createEngine(
       for (const phase of PHASE_ORDER) {
         world.setPhase(phase);
         for (const system of systemsByPhase.get(phase)!) {
-          system.run(ctx);
+          withTickMath(system.id, () => system.run(ctx));
         }
       }
       world.setPhase(null);
@@ -412,6 +455,18 @@ export function createEngine(
       activeScenarioId = scenarioId;
       tickIndex = 0;
       pending = [];
+      // Push REGISTRY_REPLACEMENT warnings so they are delivered on the first
+      // tick or dispatch after loadScenario. Observable via engine.onEvent.
+      for (const w of registrationWarnings) {
+        pending.push({
+          kind: "REGISTRY_REPLACEMENT",
+          tick: 0,
+          registry: w.registry,
+          replacedKind: w.replacedKind,
+          replacedBy: w.replacedBy,
+          previousPlugin: w.previousPlugin,
+        });
+      }
       tickHistory = [];
       actionHistory = [];
       world.reset();
