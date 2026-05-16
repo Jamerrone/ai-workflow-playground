@@ -238,6 +238,29 @@ _Avoid_: SI units, normalised units
 Any field whose canonical form is a discriminator-object accepts a plain string when the kind has no other configuration. `"strategy": "closest-to-base"` is equivalent to `"strategy": { "kind": "closest-to-base" }`. The Loader normalises strings to objects before validation; plugin validators only see object form.
 _Avoid_: enum value, plain string config
 
+### Extension surface
+
+**JSON adds content** — a composition of already-registered primitives. JSON files define new instances of existing content types by referencing registered `kind` values. No plugin code is needed or permitted for this. Examples:
+- A new Tower archetype with different cost, stats, AttackEffects (e.g. `"kind": "dot"`), and an UpgradeTree using `stat` or `attackMutation` UpgradeOps.
+- A new Enemy with different `stats`, `tags`, and `killReward`.
+- A new Map with different Paths, BlockedRegions, and a PlacementMode (e.g. `"kind": "free"`).
+- A new Wave with different WaveGroups, spawn intervals, and a duration cap.
+- A new Scenario assembling existing Maps and Waves with a WaveTrigger (e.g. `"kind": "auto"`).
+- A new Difficulty carrying enemy stat multipliers and reward multipliers.
+- A new Upgrade node that applies built-in UpgradeOps (`stat`, `attackMutation`, `guardModifier`).
+
+**Plugin code adds primitives** — net-new behaviour registered into a Registry. A primitive is anything that introduces a new `kind` string the Loader would not otherwise recognise. Plugins register the function; JSON authors reference the result by `kind`. Examples:
+- A new AttackEffect kind (e.g. `pierce`, `lifesteal`) — registers a handler into the **AttackEffect** registry.
+- A new TargetingStrategy (e.g. `longest-range`) — registers a selection function into the **TargetingStrategy** registry.
+- A new Component (e.g. `charge`) — registers a typed Component schema into the **Component** registry.
+- A new System (e.g. `crit-plugin/apply-crit`) — registers per-tick logic into the **System** registry.
+- A new EntityKind (e.g. `hero`) — registers an archetype into the **EntityKind** registry.
+- A new PlayerActionHandler kind (e.g. `activateAbility`) — registers between-tick logic into the **PlayerActionHandler** registry.
+- A new GameRule key (e.g. `critChance`) — registers a global evaluator into the **GameRule** registry.
+- A new PlacementMode or RewardKind — registers a function-backed discriminator kind into its registry.
+
+**The test**: if the `kind` value you need already exists in the built-in registries, JSON alone is sufficient. If no registered plugin provides that `kind`, you need a Plugin.
+
 ### Tick
 
 **Tick**:
@@ -270,3 +293,9 @@ _Avoid_: stage, pass
 
 > **Dev:** "Can I make my custom targeting **System** run before the built-in Movement system?"
 > **Domain expert:** "Yes — register it in the **Simulation phase** with `before: ['kernel/movement']`. The kernel will surface the resolved order at construction so you can verify."
+
+> **Dev:** "I want to add a new Tower that slows and poisons enemies. Do I need a plugin?"
+> **Domain expert:** "No — both `slow` and `dot` are built-in **AttackEffect** kinds. Write a JSON Tower archetype that carries an Attack with `effects: [{ kind: 'slow', ... }, { kind: 'dot', ... }]` and the Loader handles the rest."
+
+> **Dev:** "I want a new `lifesteal` AttackEffect that heals the attacker for a fraction of damage dealt. Do I need a plugin?"
+> **Domain expert:** "Yes — `lifesteal` is a net-new behaviour; no built-in AttackEffect kind covers it. Register a Plugin that contributes a `lifesteal` handler into the **AttackEffect** registry. After that, any JSON Tower can reference it by `kind: 'lifesteal'`."
