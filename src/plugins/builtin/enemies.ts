@@ -125,16 +125,6 @@ function validateEnemies(ctx: BucketValidatorContext): void {
       });
     }
   }
-  if (isObject(raw.meta) && raw.meta.symbol !== undefined && typeof raw.meta.symbol !== "string") {
-    ctx.addError({
-      severity: "error",
-      code: "INVALID_FIELD",
-      path: `${path}.meta.symbol`,
-      message: `Enemy '${id}' meta.symbol must be a string.`,
-      expected: "string",
-      actual: typeof raw.meta.symbol,
-    });
-  }
   if (raw.targeting !== undefined && isObject(raw.targeting)) {
     checkKind(ctx, "targeting", raw.targeting, `${path}.targeting`);
   }
