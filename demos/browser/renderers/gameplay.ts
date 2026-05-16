@@ -264,7 +264,7 @@ export class GameplayRenderer {
     const isAerial =
       def?.tags?.includes("aerial") || def?.tags?.includes("flying");
     const color = isAerial ? ENEMY_COLOR_AERIAL : ENEMY_COLOR_GROUND;
-    const label = this.enemyArchetypes[archetypeId]?.meta?.symbol ?? archetypeId[0]?.toUpperCase() ?? "?";
+    const label = def?.meta?.symbol ?? archetypeId[0]?.toUpperCase() ?? "?";
 
     ctx.beginPath();
     ctx.arc(cx, cy, CELL * 0.3, 0, Math.PI * 2);
