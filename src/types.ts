@@ -466,4 +466,6 @@ export interface Engine {
   snapshot(): string;
   saveState(options?: SaveOptions): SavedState;
   loadState(bundle: SavedState): void;
+  /** Read-only access to the world for renderers. Never mutate via this reference. */
+  readonly world: import("./kernel/world.js").World;
 }

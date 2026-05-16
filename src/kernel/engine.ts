@@ -523,6 +523,7 @@ export function createEngine(
         actions: [...actionHistory],
       };
     },
+    world,
     loadState(bundle: SavedState): void {
       assertAlive();
       if (bundle.format === "snapshot") {

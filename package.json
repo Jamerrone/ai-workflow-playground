@@ -10,9 +10,13 @@
     "sandcastle": "npx sandcastle docker build-image && npx tsx .sandcastle/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser": "playwright test",
     "typecheck": "tsc --noEmit",
     "check:kernel-purity": "tsx scripts/check-kernel-purity.ts",
-    "demo:cli": "npx tsx demos/cli/main.ts"
+    "demo:cli": "npx tsx demos/cli/main.ts",
+    "dev:browser": "vite",
+    "build:browser": "vite build",
+    "preview:browser": "vite preview"
   },
   "repository": {
     "type": "git",
@@ -28,9 +32,11 @@
   "homepage": "https://github.com/Jamerrone/ai-workflow-playground#readme",
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.5.10",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.7.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
+    "vite": "^7.3.3",
     "vitest": "^3.2.4"
   }
 }

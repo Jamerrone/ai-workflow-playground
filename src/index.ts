@@ -1,4 +1,5 @@
 export { createEngine } from "./kernel/engine.js";
+export type { World, Entity, QuerySpec } from "./kernel/world.js";
 export { EngineDisposedError } from "./kernel/errors.js";
 export { Phase, PHASE_ORDER } from "./types.js";
 export {
