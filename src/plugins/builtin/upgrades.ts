@@ -13,14 +13,13 @@ import {
   validateUpgradeOpFields,
 } from "../../loader/validator-helpers.js";
 import type { BucketValidatorContext } from "../../loader/types.js";
+import { TowersState } from "./towers.js";
 
 declare module "../../types.js" {
   interface GameEvents {
     upgradePurchased: { kind: "upgradePurchased"; tick: number; tower: string; upgrade: string; delta: number; amount: number };
   }
 }
-
-const TOWERS_STATE_ENTITY = "towers/state";
 
 interface AttackEffectEntry {
   id?: string;
@@ -197,7 +196,7 @@ function purchaseHandler(
       );
     }
   }
-  const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
+  const goldEntity = ctx.world.get(TowersState.entityId);
   const goldComp = goldEntity?.components.get("gold");
   const cost = upgrade.cost ?? 0;
   if (!goldComp || goldComp.amount < cost) {
@@ -235,7 +234,7 @@ function purchaseHandler(
 
   ctx.world.mutate(action.tower, "purchasedUpgrades", () => [...purchased, action.upgrade]);
   const newGold = goldComp.amount - cost;
-  ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount: newGold }));
+  ctx.world.mutate(TowersState.entityId, "gold", () => ({ amount: newGold }));
 
   ctx.emit({
     kind: "upgradePurchased",

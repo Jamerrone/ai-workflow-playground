@@ -1,4 +1,5 @@
 import { Phase, type Plugin, type Position } from "../../types.js";
+import { WinLossState } from "./win-loss.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -92,13 +93,13 @@ export const movementPlugin: Plugin = {
                 base: baseId,
                 damage: pp.baseDamage,
               });
-              const stateEntity = ctx.world.get("win-loss/state");
+              const stateEntity = ctx.world.get(WinLossState.entityId);
               const bases = stateEntity?.components.get("bases");
               if (bases) {
                 const updatedEntries = bases.entries.map((b) =>
                   b.id === baseId ? { ...b, hp: b.hp - pp.baseDamage } : b,
                 );
-                ctx.world.mutate("win-loss/state", "bases", () => ({
+                ctx.world.mutate(WinLossState.entityId, "bases", () => ({
                   entries: updatedEntries,
                 }));
                 const damagedBase = updatedEntries.find((b) => b.id === baseId)!;

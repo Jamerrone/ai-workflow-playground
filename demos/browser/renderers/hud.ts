@@ -1,8 +1,7 @@
 import type { Engine } from "../../../src/index.js";
-
-const TOWERS_STATE_ENTITY = "towers/state";
-const WIN_LOSS_STATE_ENTITY = "win-loss/state";
-const WAVES_STATE_ENTITY = "waves/state";
+import { TowersState } from "../../../src/plugins/builtin/towers.js";
+import { WinLossState } from "../../../src/plugins/builtin/win-loss.js";
+import { WavesState } from "../../../src/plugins/builtin/waves.js";
 
 export class HudRenderer {
   private readonly engine: Engine;
@@ -70,22 +69,19 @@ export class HudRenderer {
   // Call after engine.loadScenario, otherwise the relevant entities
   // haven't been spawned yet.
   syncFromWorld(): void {
-    const towersState = this.engine.world.get(TOWERS_STATE_ENTITY);
-    const gold = towersState?.components.get("gold");
-    if (gold) this.goldEl.textContent = String(gold.amount);
+    const gold = TowersState.readGold(this.engine.world);
+    if (gold !== undefined) this.goldEl.textContent = String(gold);
 
-    const winLossState = this.engine.world.get(WIN_LOSS_STATE_ENTITY);
-    const bases = winLossState?.components.get("bases");
-    if (bases) {
-      for (const b of bases.entries) {
+    const bases = WinLossState.readBases(this.engine.world);
+    if (bases.length > 0) {
+      for (const b of bases) {
         this.baseHp.set(b.id, b.hp);
         this.baseMaxHp.set(b.id, b.hp);
       }
       this.renderBases();
     }
 
-    const wavesState = this.engine.world.get(WAVES_STATE_ENTITY);
-    const ws = wavesState?.components.get("waveState");
+    const ws = WavesState.read(this.engine.world);
     if (ws) {
       this.waveEl.textContent = ws.active
         ? String(ws.nextIndex + 1)

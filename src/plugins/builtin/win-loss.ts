@@ -5,6 +5,8 @@ import {
   type Plugin,
   type Position,
 } from "../../types.js";
+import type { World } from "../../kernel/world.js";
+import { WavesState } from "./waves.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -18,7 +20,16 @@ declare module "../../types.js" {
 }
 
 const STATE_ENTITY = "win-loss/state";
-const WAVES_STATE_ENTITY = "waves/state";
+
+export const WinLossState = {
+  entityId: STATE_ENTITY,
+  readBases(world: World): ReadonlyArray<{ id: string; position: Position; hp: number }> {
+    return world.get(STATE_ENTITY)?.components.get("bases")?.entries ?? [];
+  },
+  readStatus(world: World) {
+    return world.get(STATE_ENTITY)?.components.get("scenarioStatus");
+  },
+};
 
 export const winLossPlugin: Plugin = {
   id: "win-loss",
@@ -55,7 +66,7 @@ export const winLossPlugin: Plugin = {
         const status = stateEntity.components.get("scenarioStatus");
         if (!status || status.ended) return;
         const bases = stateEntity.components.get("bases");
-        const wavesEntity = ctx.world.get(WAVES_STATE_ENTITY);
+        const wavesEntity = ctx.world.get(WavesState.entityId);
         const ws = wavesEntity?.components.get("waveState");
         if (!bases || !ws) return;
 

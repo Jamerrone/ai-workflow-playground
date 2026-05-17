@@ -1,17 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { createEngine } from "../src/index.js";
-import type { ConfigRegistry, GameEvent } from "../src/index.js";
-import { builtInBundle } from "../src/plugins/builtin/index.js";
+import type { ConfigRegistry, GameEvent, World } from "../src/index.js";
+import { builtInBundle, TowersState } from "../src/plugins/builtin/index.js";
 import { buildUpgradesRegistry } from "./helpers/upgrades-registry.js";
 
 function createTestEngine(registry: ConfigRegistry, seed = 1) {
   return createEngine(registry, { plugins: builtInBundle, seed });
 }
 
-function gold(snapshot: string): number {
-  const snap = JSON.parse(snapshot) as { entities: Array<{ id: string; components: Record<string, unknown> }> };
-  const state = snap.entities.find((x) => x.id === "towers/state");
-  return ((state?.components.gold as { amount: number } | undefined)?.amount) ?? 0;
+function gold(world: World): number {
+  return TowersState.readGold(world) ?? 0;
 }
 
 function entityIds(snapshot: string): string[] {
@@ -56,9 +54,9 @@ describe("sellTower: refund math (defaultSellRefundPercent)", () => {
     const towerId = (placed.effect as { entityId: string }).entityId;
     expect(engine.purchaseUpgrade(towerId, "damage-boost").ok).toBe(true); // cost 30
     expect(engine.purchaseUpgrade(towerId, "rapid-fire").ok).toBe(true);   // cost 50
-    const beforeSell = gold(engine.snapshot());
+    const beforeSell = gold(engine.world);
     const r = engine.sellTower(towerId);
-    const afterSell = gold(engine.snapshot());
+    const afterSell = gold(engine.world);
     engine.dispose();
     expect(r.ok).toBe(true);
     // archer cost=10, damage-boost=30, rapid-fire=50 → total=90. 90 * 0.7 = 63.
@@ -72,9 +70,9 @@ describe("sellTower: refund math (defaultSellRefundPercent)", () => {
     const placed = engine.placeTower("archer", { x: 4, y: 0 });
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
-    const beforeSell = gold(engine.snapshot());
+    const beforeSell = gold(engine.world);
     const r = engine.sellTower(towerId);
-    const afterSell = gold(engine.snapshot());
+    const afterSell = gold(engine.world);
     engine.dispose();
     expect(r.ok).toBe(true);
     // 10 * 0.7 = 7
@@ -90,9 +88,9 @@ describe("sellTower: refund math (defaultSellRefundPercent)", () => {
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
     expect(engine.purchaseUpgrade(towerId, "damage-boost").ok).toBe(true); // cost 30
-    const beforeSell = gold(engine.snapshot());
+    const beforeSell = gold(engine.world);
     const r = engine.sellTower(towerId);
-    const afterSell = gold(engine.snapshot());
+    const afterSell = gold(engine.world);
     engine.dispose();
     expect(r.ok).toBe(true);
     // (10 + 30) * 0.5 = 20
@@ -107,9 +105,9 @@ describe("sellTower: refund math (defaultSellRefundPercent)", () => {
     const placed = engine.placeTower("archer", { x: 4, y: 0 });
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
-    const beforeSell = gold(engine.snapshot());
+    const beforeSell = gold(engine.world);
     const r = engine.sellTower(towerId);
-    const afterSell = gold(engine.snapshot());
+    const afterSell = gold(engine.world);
     engine.dispose();
     expect(r.ok).toBe(true);
     // 10 * 0.33 = 3.3 → floor = 3
