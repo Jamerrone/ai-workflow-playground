@@ -10,6 +10,8 @@ import {
 import { checkKind, requireArray } from "../../loader/validator-helpers.js";
 import { isObject } from "../../loader/normalize.js";
 import type { BucketValidatorContext } from "../../loader/types.js";
+import type { World } from "../../kernel/world.js";
+import { TowersState } from "./towers.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -30,7 +32,13 @@ interface WaveState {
 }
 
 const STATE_ENTITY = "waves/state";
-const GOLD_ENTITY = "towers/state";
+
+export const WavesState = {
+  entityId: STATE_ENTITY,
+  read(world: World) {
+    return world.get(STATE_ENTITY)?.components.get("waveState");
+  },
+};
 
 interface MapPath {
   readonly id: string;
@@ -453,11 +461,10 @@ export const wavesPlugin: Plugin = {
       apply(ctx: RewardContext, event: GameEvent) {
         const reward = (event as { reward?: number }).reward;
         if (typeof reward !== "number" || reward === 0) return;
-        const stateEntity = ctx.world.get(GOLD_ENTITY);
-        const gold = stateEntity?.components.get("gold");
-        if (!gold) return;
-        const newAmount = gold.amount + reward;
-        ctx.world.mutate(GOLD_ENTITY, "gold", () => ({ amount: newAmount }));
+        const currentGold = TowersState.readGold(ctx.world);
+        if (currentGold === undefined) return;
+        const newAmount = currentGold + reward;
+        ctx.world.mutate(TowersState.entityId, "gold", () => ({ amount: newAmount }));
         ctx.emit({
           kind: "goldChanged",
           tick: ctx.tickIndex,

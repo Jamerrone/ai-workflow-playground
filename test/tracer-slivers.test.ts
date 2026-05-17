@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createEngine } from "../src/index.js";
 import type { GameEvent } from "../src/index.js";
-import { builtInBundle } from "../src/plugins/builtin/index.js";
+import { builtInBundle, TowersState } from "../src/plugins/builtin/index.js";
 import { buildTracerRegistry } from "./helpers/tracer-registry.js";
 
 function freshEngine(seed = 7) {
@@ -166,14 +166,10 @@ describe("tracer slivers", () => {
       engine.placeTower("archer", { x: 2, y: 0 });
       engine.sendNextWave();
       for (let i = 0; i < 20; i++) engine.tick(0.5);
-      const snap = JSON.parse(engine.snapshot()) as {
-        entities: Array<{ id: string; components: Record<string, unknown> }>;
-      };
+      const gold = TowersState.readGold(engine.world);
       engine.dispose();
       expect(killed).toHaveLength(1);
       expect(killed[0]!.killReward).toBe(25);
-      const towersState = snap.entities.find((e) => e.id === "towers/state")!;
-      const gold = (towersState.components.gold as { amount: number }).amount;
       expect(gold).toBe(100 - 50 + 25); // start − tower cost + killReward
     });
 

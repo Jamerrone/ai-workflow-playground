@@ -29,6 +29,10 @@ export {
   winLossPlugin,
 };
 
+export { TowersState } from "./towers.js";
+export { WavesState } from "./waves.js";
+export { WinLossState } from "./win-loss.js";
+
 export const builtInBundle: readonly Plugin[] = [
   towersPlugin,
   enemiesPlugin,

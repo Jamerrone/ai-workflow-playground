@@ -9,6 +9,7 @@ import {
   type TargetingStrategyConfig,
 } from "../../types.js";
 import { matchesFilter } from "./attack-shared.js";
+import { TowersState } from "./towers.js";
 
 declare module "../../types.js" {
   interface GameEvents {
@@ -18,7 +19,6 @@ declare module "../../types.js" {
   }
 }
 
-const TOWERS_STATE_ENTITY = "towers/state";
 const DEFAULT_TARGETING: TargetingStrategyConfig = { kind: "closest-to-base" };
 const DEFAULT_ATTACK_SELECTION: AttackSelectionStrategyConfig = { kind: "declaration-order" };
 
@@ -167,7 +167,7 @@ export const combatPlugin: Plugin = {
           .query({ all: ["enemy", "health"] })
           .filter((e) => (e.components.get("health")?.hp ?? 1) <= 0);
         if (dead.length === 0) return;
-        const goldEntity = ctx.world.get(TOWERS_STATE_ENTITY);
+        const goldEntity = ctx.world.get(TowersState.entityId);
         const gold = goldEntity?.components.get("gold");
         let amount = gold?.amount ?? 0;
         const startingAmount = amount;
@@ -183,7 +183,7 @@ export const combatPlugin: Plugin = {
           ctx.world.destroy(e.id);
         }
         if (goldEntity) {
-          ctx.world.mutate(TOWERS_STATE_ENTITY, "gold", () => ({ amount }));
+          ctx.world.mutate(TowersState.entityId, "gold", () => ({ amount }));
           ctx.emit({
             kind: "goldChanged",
             tick: ctx.tickIndex,

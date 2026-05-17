@@ -14,6 +14,7 @@ import {
   type SellTowerAction,
   type TargetingStrategyConfig,
 } from "../../types.js";
+import type { World } from "../../kernel/world.js";
 import {
   checkKind,
   requireArray,
@@ -137,6 +138,13 @@ interface UpgradeArchetype {
 
 const DEFAULT_SELL_REFUND_PERCENT = 0.7;
 const TOWERS_STATE_ENTITY = "towers/state";
+
+export const TowersState = {
+  entityId: TOWERS_STATE_ENTITY,
+  readGold(world: World): number | undefined {
+    return world.get(TOWERS_STATE_ENTITY)?.components.get("gold")?.amount;
+  },
+};
 
 interface MapData {
   readonly placementMode: { readonly kind: string };

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createEngine, buildRegistry } from "../src/index.js";
-import type { ConfigRegistry, GameEvent, LoaderInput } from "../src/index.js";
-import { builtInBundle } from "../src/plugins/builtin/index.js";
+import type { ConfigRegistry, GameEvent, LoaderInput, World } from "../src/index.js";
+import { builtInBundle, TowersState } from "../src/plugins/builtin/index.js";
 import { buildUpgradesRegistry } from "./helpers/upgrades-registry.js";
 
 function createTestEngine(registry: ConfigRegistry, seed = 1) {
@@ -14,10 +14,8 @@ function getTowerEntityState(snapshot: string, entityId: string): Record<string,
   return e?.components;
 }
 
-function gold(snapshot: string): number {
-  const snap = JSON.parse(snapshot) as { entities: Array<{ id: string; components: Record<string, unknown> }> };
-  const state = snap.entities.find((x) => x.id === "towers/state");
-  return ((state?.components.gold as { amount: number } | undefined)?.amount) ?? 0;
+function gold(world: World): number {
+  return TowersState.readGold(world) ?? 0;
 }
 
 describe("upgrades: Loader validation", () => {
@@ -261,10 +259,10 @@ describe("upgrades: purchaseUpgrade action", () => {
     const placed = engine.placeTower("archer", { x: 4, y: 0 });
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
-    const startGold = gold(engine.snapshot()); // starting gold - tower cost
+    const startGold = gold(engine.world); // starting gold - tower cost
     const r = engine.purchaseUpgrade(towerId, "damage-boost");
     expect(r.ok).toBe(true);
-    const endGold = gold(engine.snapshot());
+    const endGold = gold(engine.world);
     engine.dispose();
     expect(endGold).toBe(startGold - 30);
     const purchased = events.find((e) => e.kind === "upgradePurchased");
@@ -385,9 +383,9 @@ describe("upgrades: failure codes", () => {
     const placed = engine.placeTower("archer", { x: 4, y: 0 });
     if (!placed.ok) throw new Error("place failed");
     const towerId = (placed.effect as { entityId: string }).entityId;
-    const before = gold(engine.snapshot());
+    const before = gold(engine.world);
     const r = engine.purchaseUpgrade(towerId, "phantom-upgrade");
-    const after = gold(engine.snapshot());
+    const after = gold(engine.world);
     engine.dispose();
     expect(r.ok).toBe(false);
     expect(after).toBe(before);
