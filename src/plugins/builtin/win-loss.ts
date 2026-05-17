@@ -66,8 +66,7 @@ export const winLossPlugin: Plugin = {
         const status = stateEntity.components.get("scenarioStatus");
         if (!status || status.ended) return;
         const bases = stateEntity.components.get("bases");
-        const wavesEntity = ctx.world.get(WavesState.entityId);
-        const ws = wavesEntity?.components.get("waveState");
+        const ws = WavesState.read(ctx.world);
         if (!bases || !ws) return;
 
         const baseDead = bases.entries.some((b) => b.hp <= 0);

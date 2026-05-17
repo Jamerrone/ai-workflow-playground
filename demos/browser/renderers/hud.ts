@@ -1,7 +1,5 @@
 import type { Engine } from "../../../src/index.js";
-import { TowersState } from "../../../src/plugins/builtin/towers.js";
-import { WinLossState } from "../../../src/plugins/builtin/win-loss.js";
-import { WavesState } from "../../../src/plugins/builtin/waves.js";
+import { TowersState, WinLossState, WavesState } from "../../../src/plugins/builtin/index.js";
 
 export class HudRenderer {
   private readonly engine: Engine;
