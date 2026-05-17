@@ -93,10 +93,9 @@ export const movementPlugin: Plugin = {
                 base: baseId,
                 damage: pp.baseDamage,
               });
-              const stateEntity = ctx.world.get(WinLossState.entityId);
-              const bases = stateEntity?.components.get("bases");
-              if (bases) {
-                const updatedEntries = bases.entries.map((b) =>
+              const currentBases = WinLossState.readBases(ctx.world);
+              if (currentBases.length > 0) {
+                const updatedEntries = currentBases.map((b) =>
                   b.id === baseId ? { ...b, hp: b.hp - pp.baseDamage } : b,
                 );
                 ctx.world.mutate(WinLossState.entityId, "bases", () => ({
